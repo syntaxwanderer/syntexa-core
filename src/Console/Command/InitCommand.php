@@ -11,14 +11,15 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
- * Scaffolds Syntexa project structure: bin/, public/, src/, var/, .env.example, server.php, bin/syntexa.
+ * Scaffolds Syntexa project structure: bin/, public/, src/, var/, .env.example, server.php, bin/syntexa,
+ * AI_ENTRY.md, README.md, docs, example Request/Handler, autoload in composer.json, one test.
  */
 class InitCommand extends Command
 {
     protected function configure(): void
     {
         $this->setName('init')
-            ->setDescription('Create Syntexa project structure (bin, public, src, var, server.php, .env.example)')
+            ->setDescription('Create Syntexa project structure + AI_ENTRY, README, docs, example code, test')
             ->addOption('dir', 'd', InputOption::VALUE_REQUIRED, 'Target directory (default: current working directory)', null)
             ->addOption('force', 'f', InputOption::VALUE_NONE, 'Overwrite existing files');
     }
@@ -44,6 +45,8 @@ class InitCommand extends Command
             'src/modules',
             'src/infrastructure/database',
             'src/infrastructure/migrations',
+            'docs',
+            'tests',
             'var/cache',
             'var/log',
             'var/docs',
@@ -72,11 +75,19 @@ class InitCommand extends Command
         $skipped = [];
 
         $files = [
+            'AI_ENTRY.md' => $this->getAiEntryContent(),
+            'README.md' => $this->getReadmeContent(),
             '.env.example' => $this->getEnvExampleContent(),
             'server.php' => $this->getServerPhpContent(),
             'bin/syntexa' => $this->getBinSyntexaContent(),
             '.gitignore' => $this->getGitignoreContent(),
             'public/.htaccess' => $this->getHtaccessContent(),
+            'docs/CONVENTIONS.md' => $this->getConventionsContent(),
+            'docs/DEPENDENCIES.md' => $this->getDependenciesContent(),
+            'src/Request/HomeRequest.php' => $this->getHomeRequestContent(),
+            'src/Handler/HomeHandler.php' => $this->getHomeHandlerContent(),
+            'tests/HomeTest.php' => $this->getHomeTestContent(),
+            'phpunit.xml.dist' => $this->getPhpunitXmlContent(),
         ];
 
         foreach ($files as $relPath => $content) {
@@ -106,16 +117,237 @@ class InitCommand extends Command
             $io->note('Skipped (exists): ' . $f . ' (use --force to overwrite)');
         }
 
+        $this->patchComposerAutoload($root, $io, $force);
+
         $io->success('Project structure created.');
         $io->text([
             'Next steps:',
             '  1. cp .env.example .env',
             '  2. Edit .env (SWOOLE_PORT, etc.)',
-            '  3. Add your modules under src/modules/',
-            '  4. Run: php server.php (or use bin/syntexa server:start if using Docker)',
+            '  3. composer dump-autoload (if autoload was added)',
+            '  4. Add your modules under src/modules/',
+            '  5. Run: php server.php (or vendor/bin/syntexa server:start)',
         ]);
 
         return Command::SUCCESS;
+    }
+
+    private function patchComposerAutoload(string $root, SymfonyStyle $io, bool $force): void
+    {
+        $path = $root . '/composer.json';
+        if (!is_file($path)) {
+            return;
+        }
+        $json = json_decode(file_get_contents($path), true);
+        if (!is_array($json)) {
+            return;
+        }
+        $autoload = $json['autoload'] ?? [];
+        $psr4 = $autoload['psr-4'] ?? [];
+        if (isset($psr4['App\\']) && !$force) {
+            return;
+        }
+        $psr4['App\\'] = 'src/';
+        $psr4['App\\Tests\\'] = 'tests/';
+        $json['autoload'] = array_merge($autoload, ['psr-4' => $psr4]);
+        $encoded = json_encode($json, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        if ($encoded === false) {
+            return;
+        }
+        if (file_put_contents($path, $encoded) !== false) {
+            $io->text('Updated composer.json: autoload.psr-4 "App\\": "src/", "App\\Tests\\": "tests/"');
+        }
+    }
+
+    private function getAiEntryContent(): string
+    {
+        return <<<'MD'
+# Syntexa Framework - AI Assistant Entry Point
+
+> **Guiding principle:** Make it work → Make it right → Make it fast.
+
+## Project structure (standalone app)
+
+- **bin/syntexa** – CLI
+- **public/** – web root
+- **src/** – application code (Request, Handler, Response; see docs/CONVENTIONS.md)
+- **src/modules/** – application modules
+- **var/log**, **var/cache** – runtime
+- **vendor/syntexa/** – framework packages
+
+## Framework docs (in vendor)
+
+- **vendor/syntexa/core/docs/attributes/** – Request, Handler, Response attributes
+- **vendor/syntexa/core/docs/attributes/README.md** – attribute index
+
+## Conventions & dependencies
+
+- **docs/CONVENTIONS.md** – namespace (App\), Request/Handler/Response placement, syntexa commands
+- **docs/DEPENDENCIES.md** – syntexa/core version, where to find official docs
+
+## Quick start
+
+1. Read this file and docs/CONVENTIONS.md
+2. Run: `cp .env.example .env` then `php server.php` (or `vendor/bin/syntexa server:start`)
+3. Default URL: http://0.0.0.0:9501 (see .env SWOOLE_PORT)
+MD;
+    }
+
+    private function getReadmeContent(): string
+    {
+        return <<<'MD'
+# Syntexa App
+
+Minimal Syntexa Framework application.
+
+## Requirements
+
+- PHP 8.1+
+- Swoole extension
+- Composer
+
+## Install
+
+```bash
+composer install
+cp .env.example .env
+```
+
+## Run
+
+```bash
+php server.php
+# or
+vendor/bin/syntexa server:start
+```
+
+Default URL: **http://0.0.0.0:9501** (configurable via `.env` `SWOOLE_PORT`).
+
+## Structure
+
+- `src/Request/`, `src/Handler/` – example Request→Handler (GET /)
+- `src/modules/` – your modules
+- `docs/CONVENTIONS.md` – coding conventions
+- `docs/DEPENDENCIES.md` – Syntexa version and docs
+- `AI_ENTRY.md` – entry point for AI assistants
+
+## Tests
+
+`composer require --dev phpunit/phpunit` then `vendor/bin/phpunit`. See `tests/HomeTest.php` and `phpunit.xml.dist`.
+MD;
+    }
+
+    private function getConventionsContent(): string
+    {
+        return <<<'MD'
+# Conventions
+
+- **Application namespace:** `App\`
+- **Request DTOs:** `src/Request/` or per-module under `src/modules/`; use `#[AsRequest(path: '...', methods: ['GET'])]`
+- **Handlers:** `src/Handler/` or per-module; use `#[AsRequestHandler(for: SomeRequest::class)]`; method `handle(RequestInterface $request, ResponseInterface $response): ResponseInterface`
+- **Response DTOs:** optional; or return `\Syntexa\Core\Response::json([...])` from handler
+- **CLI:** `vendor/bin/syntexa` or `bin/syntexa` – `init`, `server:start`, `server:stop`, etc.
+MD;
+    }
+
+    private function getDependenciesContent(): string
+    {
+        return <<<'MD'
+# Syntexa dependencies
+
+- **syntexa/core** – see `composer.json` for version; framework docs in `vendor/syntexa/core/docs/attributes/`
+- Official docs / repo: check Packagist or GitHub for `syntexa/core`
+MD;
+    }
+
+    private function getHomeRequestContent(): string
+    {
+        return <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App\Request;
+
+use Syntexa\Core\Attributes\AsRequest;
+use Syntexa\Core\Contract\RequestInterface;
+
+#[AsRequest(path: '/', methods: ['GET'])]
+class HomeRequest implements RequestInterface
+{
+}
+PHP;
+    }
+
+    private function getHomeHandlerContent(): string
+    {
+        return <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App\Handler;
+
+use Syntexa\Core\Attributes\AsRequestHandler;
+use Syntexa\Core\Contract\RequestInterface;
+use Syntexa\Core\Contract\ResponseInterface;
+use Syntexa\Core\Response;
+
+#[AsRequestHandler(for: \App\Request\HomeRequest::class)]
+class HomeHandler
+{
+    public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        return Response::json([
+            'message' => 'Hello from Syntexa!',
+            'path' => '/',
+        ]);
+    }
+}
+PHP;
+    }
+
+    private function getHomeTestContent(): string
+    {
+        return <<<'PHP'
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests;
+
+use PHPUnit\Framework\TestCase;
+
+class HomeTest extends TestCase
+{
+    public function test_home_returns_expected_structure(): void
+    {
+        $this->assertTrue(true, 'Bootstrap test; replace with real HTTP test when server is available');
+    }
+}
+PHP;
+    }
+
+    private function getPhpunitXmlContent(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.0/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true">
+    <testsuites>
+        <testsuite name="default">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+</phpunit>
+XML;
     }
 
     private function getEnvExampleContent(): string

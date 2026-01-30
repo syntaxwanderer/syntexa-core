@@ -246,10 +246,11 @@ class AttributeDiscovery
         // Apply response overrides from src (AsResponseOverride) — only render hints, not class swap
         self::collectResponseOverrides();
 
-        // Find handlers and map to requests
+        // Find handlers and map to requests (Syntexa packages + project App\ handlers)
         $httpHandlerClasses = array_filter(
             IntelligentAutoloader::findClassesWithAttribute(AsRequestHandler::class),
-            fn ($class) => str_starts_with($class, 'Syntexa\\') && self::isModuleActiveForClass($class)
+            fn ($class) => (str_starts_with($class, 'Syntexa\\') && self::isModuleActiveForClass($class))
+                || self::isProjectHandler($class)
         );
         foreach ($httpHandlerClasses as $className) {
             try {
@@ -518,8 +519,17 @@ class AttributeDiscovery
 
         return str_starts_with($file, $projectSrc);
     }
-    
-    
+
+    private static function isProjectHandler(string $className): bool
+    {
+        try {
+            $file = (new ReflectionClass($className))->getFileName();
+            return $file !== false && self::isProjectRequest($file);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     /**
      * Collect response overrides declared with AsResponseOverride.
      * Store class replacement and attribute overrides for later usage.

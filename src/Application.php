@@ -368,11 +368,14 @@ class Application
             'data' => $data,
             'timestamp' => (int) round(microtime(true) * 1000),
         ];
-        @file_put_contents(
-            '/home/taras/Documents/Projects/syntexa/.cursor/debug.log',
-            json_encode($payload) . "\n",
-            FILE_APPEND
-        );
+        $logDir = getcwd() ? (getcwd() . '/var/log') : null;
+        if ($logDir && is_dir($logDir)) {
+            @file_put_contents(
+                $logDir . '/debug.log',
+                json_encode($payload) . "\n",
+                FILE_APPEND
+            );
+        }
         // #endregion
     }
 }
