@@ -48,6 +48,10 @@ class AttributeDiscovery
         // Initialize intelligent autoloader first
         IntelligentAutoloader::initialize();
         
+        // Preload module Request classes AFTER autoloader is initialized
+        // This ensures they're loaded and can be found
+        self::preloadModuleRequestClasses();
+        
         // Initialize module registry
         ModuleRegistry::initialize();
         
@@ -69,25 +73,66 @@ class AttributeDiscovery
     
     /**
      * Find a route by path and method
+     * Supports both exact matches and pattern matching with parameters like {type}
      */
     public static function findRoute(string $path, string $method = 'GET'): ?array
     {
         foreach (self::$routes as $route) {
-            if ($route['path'] === $path && in_array($method, $route['methods'])) {
-                // enrich with request handlers if applicable
-                if (($route['type'] ?? null) === 'http-request') {
-                    $reqClass = $route['class'];
-                    $extra = self::$httpRequests[$reqClass] ?? null;
-                    if ($extra) {
-                        $route['handlers'] = $extra['handlers'];
-                        $route['responseClass'] = $extra['responseClass'];
-                    }
+            $routePath = $route['path'];
+            $routeMethods = $route['methods'] ?? [$route['method'] ?? 'GET'];
+            
+            // Exact match
+            if ($routePath === $path && in_array($method, $routeMethods)) {
+                return self::enrichRoute($route);
+            }
+            
+            // Pattern match (e.g., /window-manager/{type}/{file} matches /window-manager/js/window-manager.js)
+            if (is_string($routePath) && strpos($routePath, '{') !== false && in_array($method, $routeMethods)) {
+                // Build regex pattern: replace {param} with placeholders first, then escape, then replace with regex
+                $placeholders = [];
+                $tempPath = preg_replace_callback(
+                    '/\{([^}]+)\}/',
+                    function($m) use (&$placeholders) {
+                        $placeholder = '__PLACEHOLDER_' . count($placeholders) . '__';
+                        $placeholders[$placeholder] = '([^/]+)';
+                        return $placeholder;
+                    },
+                    $routePath
+                );
+                
+                // Escape the path (use # as delimiter to avoid conflicts with /)
+                $pattern = preg_quote($tempPath, '#');
+                
+                // Replace placeholders with regex groups
+                foreach ($placeholders as $placeholder => $regex) {
+                    $pattern = str_replace($placeholder, $regex, $pattern);
                 }
-                return $route;
+                
+                $pattern = '#^' . $pattern . '$#';
+                
+                if (preg_match($pattern, $path)) {
+                    return self::enrichRoute($route);
+                }
             }
         }
         
         return null;
+    }
+    
+    /**
+     * Enrich route with handlers and response class
+     */
+    private static function enrichRoute(array $route): array
+    {
+        if (($route['type'] ?? null) === 'http-request') {
+            $reqClass = $route['class'];
+            $extra = self::$httpRequests[$reqClass] ?? null;
+            if ($extra) {
+                $route['handlers'] = $extra['handlers'];
+                $route['responseClass'] = $extra['responseClass'];
+            }
+        }
+        return $route;
     }
     
     /**
@@ -105,7 +150,11 @@ class AttributeDiscovery
         self::$resolvedResponseAttrs = [];
         self::$responseClassAliases = [];
 
+        // Preload module Handler classes to ensure they're in classMap
+        self::preloadModuleHandlerClasses();
+        
         // Find all classes with AsRequest attribute
+        // Note: preloadModuleRequestClasses is already called in initialize()
         $httpRequestClasses = array_filter(
             IntelligentAutoloader::findClassesWithAttribute(AsRequest::class),
             fn ($class) => str_starts_with($class, 'Syntexa\\') && self::isModuleActiveForClass($class)
@@ -152,9 +201,9 @@ class AttributeDiscovery
 
         foreach ($requestGroups as $baseClass => $candidates) {
             $projectCandidates = array_values(array_filter($candidates, fn ($c) => self::isProjectRequest($c['file'])));
-            // If no project candidates, use packages candidates (for module routes)
+            // If no project candidates, also include src/modules candidates (for module routes)
             if (empty($projectCandidates)) {
-                $projectCandidates = array_values(array_filter($candidates, fn ($c) => str_contains($c['file'], '/packages/syntexa/')));
+                $projectCandidates = array_values(array_filter($candidates, fn ($c) => str_contains($c['file'], '/src/modules/') || str_contains($c['file'], '/packages/syntexa/')));
             }
             if (empty($projectCandidates)) {
                 continue;
@@ -463,7 +512,8 @@ class AttributeDiscovery
             return false;
         }
 
-        $projectRoot = dirname(__DIR__, 5);
+        // Check if file is in project src/ directory (including src/modules/)
+        $projectRoot = self::getProjectRoot();
         $projectSrc = $projectRoot . '/src/';
 
         return str_starts_with($file, $projectSrc);
@@ -629,5 +679,132 @@ class AttributeDiscovery
             }
         }
         return true; // Default to active if not recognized as part of a module
+    }
+    
+    /**
+     * Preload Request classes from src/modules to ensure they're available for discovery
+     */
+    private static function preloadModuleRequestClasses(): void
+    {
+        $projectRoot = self::getProjectRoot();
+        $modulesDir = $projectRoot . '/src/modules';
+        
+        if (!is_dir($modulesDir)) {
+            return;
+        }
+        
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($modulesDir)
+        );
+        
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getExtension() === 'php') {
+                $content = file_get_contents($file->getPathname());
+                
+                // Check if file contains AsRequest attribute and Request in class name
+                if (strpos($content, 'AsRequest') !== false && 
+                    strpos($content, 'Request') !== false &&
+                    preg_match('/namespace\s+([^;]+);/', $content, $nsMatches) &&
+                    preg_match('/class\s+(\w+Request)/', $content, $classMatches)) {
+                    $fullClassName = $nsMatches[1] . '\\' . $classMatches[1];
+                    
+                    // Load class if not already loaded
+                    if (!class_exists($fullClassName)) {
+                        try {
+                            // Use IntelligentAutoloader's analyzeFile to add to classMap
+                            $reflection = new \ReflectionClass(\Syntexa\Core\IntelligentAutoloader::class);
+                            $analyzeMethod = $reflection->getMethod('analyzeFile');
+                            $analyzeMethod->setAccessible(true);
+                            $analyzeMethod->invoke(null, $file->getPathname());
+                            
+                            // Then require the file
+                            require_once $file->getPathname();
+                        } catch (\Throwable $e) {
+                            // Skip if can't load
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /**
+     * Get project root directory
+     */
+    private static function getProjectRoot(): string
+    {
+        // Try common locations
+        $possibleRoots = [
+            '/var/www/html',
+            getcwd() ?: __DIR__,
+        ];
+        
+        foreach ($possibleRoots as $root) {
+            if (is_dir($root . '/src/modules') && is_file($root . '/composer.json')) {
+                return $root;
+            }
+        }
+        
+        // Fallback: walk up from current directory
+        $dir = __DIR__;
+        while ($dir !== '/' && $dir !== '') {
+            if (is_file($dir . '/composer.json') && is_dir($dir . '/src/modules')) {
+                return $dir;
+            }
+            $parent = dirname($dir);
+            if ($parent === $dir) {
+                break;
+            }
+            $dir = $parent;
+        }
+        
+        return '/var/www/html';
+    }
+    
+    /**
+     * Preload Handler classes from src/modules to ensure they're available for discovery
+     */
+    private static function preloadModuleHandlerClasses(): void
+    {
+        $projectRoot = self::getProjectRoot();
+        $modulesDir = $projectRoot . '/src/modules';
+        
+        if (!is_dir($modulesDir)) {
+            return;
+        }
+        
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($modulesDir)
+        );
+        
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getExtension() === 'php') {
+                $content = file_get_contents($file->getPathname());
+                
+                // Check if file contains AsRequestHandler attribute and Handler in class name
+                if (strpos($content, 'AsRequestHandler') !== false && 
+                    strpos($content, 'Handler') !== false &&
+                    preg_match('/namespace\s+([^;]+);/', $content, $nsMatches) &&
+                    preg_match('/class\s+(\w+Handler)/', $content, $classMatches)) {
+                    $fullClassName = $nsMatches[1] . '\\' . $classMatches[1];
+                    
+                    // Load class if not already loaded
+                    if (!class_exists($fullClassName)) {
+                        try {
+                            // Use IntelligentAutoloader's analyzeFile to add to classMap
+                            $reflection = new \ReflectionClass(\Syntexa\Core\IntelligentAutoloader::class);
+                            $analyzeMethod = $reflection->getMethod('analyzeFile');
+                            $analyzeMethod->setAccessible(true);
+                            $analyzeMethod->invoke(null, $file->getPathname());
+                            
+                            // Then require the file
+                            require_once $file->getPathname();
+                        } catch (\Throwable $e) {
+                            // Skip if can't load
+                        }
+                    }
+                }
+            }
+        }
     }
 }

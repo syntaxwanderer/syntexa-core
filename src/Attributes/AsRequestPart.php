@@ -33,7 +33,7 @@ class AsRequestPart implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'docs/en/attributes/AsRequestPart.md';
+        return $this->doc ?? 'packages/syntexa/core/docs/attributes/AsRequestPart.md';
     }
 }
 

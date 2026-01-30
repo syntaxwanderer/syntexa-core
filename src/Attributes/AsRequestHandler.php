@@ -32,6 +32,6 @@ class AsRequestHandler implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'docs/en/attributes/AsRequestHandler.md';
+        return $this->doc ?? 'packages/syntexa/core/docs/attributes/AsRequestHandler.md';
     }
 }

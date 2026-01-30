@@ -56,6 +56,6 @@ class AsRequest implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'docs/en/attributes/AsRequest.md';
+        return $this->doc ?? 'packages/syntexa/core/docs/attributes/AsRequest.md';
     }
 }

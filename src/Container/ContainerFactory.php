@@ -186,10 +186,18 @@ class ContainerFactory
         });
 
         // User repository - request-scoped (uses EntityManager)
-        $definitions[\Syntexa\UserDomain\Domain\Repository\UserRepositoryInterface::class] = \DI\factory(function (\DI\Container $c) {
-            $em = $c->get(\Syntexa\Orm\Entity\EntityManager::class);
-            return new \Syntexa\UserDomain\Domain\Repository\UserRepository($em);
-        });
+        // Check if project has custom repository (overlay architecture)
+        $projectRepoClass = 'Syntexa\Modules\UserDomain\Domain\Repository\UserRepository';
+        if (class_exists($projectRepoClass)) {
+            $definitions[\Syntexa\UserDomain\Domain\Repository\UserRepositoryInterface::class] = \DI\factory(function (\DI\Container $c) use ($projectRepoClass) {
+                return new $projectRepoClass($c->get(\Syntexa\Orm\Entity\EntityManager::class));
+            });
+        } else {
+            $definitions[\Syntexa\UserDomain\Domain\Repository\UserRepositoryInterface::class] = \DI\factory(function (\DI\Container $c) {
+                $em = $c->get(\Syntexa\Orm\Entity\EntityManager::class);
+                return new \Syntexa\UserDomain\Domain\Repository\UserRepository($em);
+            });
+        }
 
         // Auth service - request-scoped
         $definitions[\Syntexa\UserDomain\Domain\Service\AuthService::class] = \DI\autowire();

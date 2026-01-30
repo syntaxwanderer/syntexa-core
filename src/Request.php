@@ -51,7 +51,20 @@ readonly class Request
     
     public function getHeader(string $name): ?string
     {
-        return $this->headers[$name] ?? null;
+        // Try exact match first
+        if (isset($this->headers[$name])) {
+            return $this->headers[$name];
+        }
+        
+        // Try case-insensitive match
+        $nameLower = strtolower($name);
+        foreach ($this->headers as $key => $value) {
+            if (strtolower($key) === $nameLower) {
+                return $value;
+            }
+        }
+        
+        return null;
     }
     
     public function getQuery(string $key, string $default = ''): string

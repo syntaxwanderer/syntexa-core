@@ -28,6 +28,14 @@ class RequestFactory
      */
     public static function fromSwoole(\Swoole\Http\Request $swooleRequest): Request
     {
+        // Get raw content - try both getContent() and rawContent() methods
+        // Swoole's getContent() may return false for empty body, rawContent() is an alias
+        $rawContent = $swooleRequest->getContent();
+        if ($rawContent === false && method_exists($swooleRequest, 'rawContent')) {
+            $rawContent = $swooleRequest->rawContent();
+        }
+        $content = ($rawContent !== false && $rawContent !== '') ? $rawContent : null;
+        
         return new Request(
             method: $swooleRequest->server['request_method'] ?? 'GET',
             uri: $swooleRequest->server['request_uri'] ?? '/',
@@ -36,7 +44,7 @@ class RequestFactory
             post: $swooleRequest->post ?? [],
             server: array_merge($swooleRequest->server ?? [], ['SWOOLE_SERVER' => '1']),
             cookies: $swooleRequest->cookie ?? [],
-            content: $swooleRequest->getContent() ?: null
+            content: $content
         );
     }
     

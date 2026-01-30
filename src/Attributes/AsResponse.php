@@ -32,7 +32,7 @@ class AsResponse implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'docs/en/attributes/AsResponse.md';
+        return $this->doc ?? 'packages/syntexa/core/docs/attributes/AsResponse.md';
     }
 }
 

@@ -7,6 +7,7 @@ namespace Syntexa\Core\Http;
 use Syntexa\Core\Request;
 use ReflectionClass;
 use ReflectionProperty;
+use Syntexa\Core\Request\Attribute\PathParam;
 
 /**
  * Hydrates Request DTO objects from HTTP Request data
@@ -29,21 +30,27 @@ class RequestDtoHydrator
     {
         $reflection = new ReflectionClass($dto);
         
+        // Extract path parameters from route pattern
+        $pathParams = self::extractPathParams($dto, $httpRequest);
+        
         // Collect data from all sources
         $data = self::collectData($httpRequest);
+        
+        // Merge path parameters (highest priority)
+        $data = array_merge($data, $pathParams);
         
         // Hydrate each public property
         foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
             $propertyName = $property->getName();
             
-            // Skip if property is not initialized or has a value
-            if ($property->isInitialized($dto)) {
-                continue;
-            }
-            
             // Get value from collected data
             $value = $data[$propertyName] ?? null;
             
+            // Check if property has PathParam attribute (required parameter)
+            $pathParamAttrs = $property->getAttributes(PathParam::class);
+            $isPathParam = !empty($pathParamAttrs);
+            
+            // Set value if available
             if ($value !== null) {
                 // Get property type for type casting
                 $type = $property->getType();
@@ -51,10 +58,105 @@ class RequestDtoHydrator
                 
                 // Set property value
                 $property->setValue($dto, $typedValue);
+            } elseif ($isPathParam && !$property->isInitialized($dto)) {
+                // Path parameter is required but not found - set empty string for string types
+                $type = $property->getType();
+                if ($type instanceof \ReflectionNamedType && $type->getName() === 'string') {
+                    $property->setValue($dto, '');
+                }
             }
         }
         
         return $dto;
+    }
+    
+    /**
+     * Extract path parameters from URL based on route pattern
+     */
+    private static function extractPathParams(object $dto, Request $httpRequest): array
+    {
+        $params = [];
+        $reflection = new ReflectionClass($dto);
+        
+        // Get route pattern from AsRequest attribute
+        $requestAttrs = $reflection->getAttributes(\Syntexa\Core\Attributes\AsRequest::class);
+        if (empty($requestAttrs)) {
+            return $params;
+        }
+        
+        try {
+            $requestAttr = $requestAttrs[0]->newInstance();
+            $routePattern = $requestAttr->path ?? null;
+        } catch (\Throwable $e) {
+            error_log("RequestDtoHydrator: Failed to get AsRequest attribute: " . $e->getMessage());
+            return $params;
+        }
+        
+        // Handle resolved path (might be false if EnvValueResolver returned false for null)
+        if ($routePattern === null || $routePattern === false) {
+            return $params;
+        }
+        
+        // Ensure it's a string
+        if (!is_string($routePattern)) {
+            error_log("RequestDtoHydrator: routePattern is not a string: " . gettype($routePattern) . " = " . var_export($routePattern, true));
+            return $params;
+        }
+        
+        if (empty($routePattern)) {
+            return $params;
+        }
+        
+        $needle = '{';
+        if (!is_string($needle)) {
+            error_log("RequestDtoHydrator: needle is not a string: " . gettype($needle));
+            return $params;
+        }
+        if (strpos($routePattern, $needle) === false) {
+            return $params; // No path parameters
+        }
+        
+        // Extract all path parameters from route pattern
+        $pathParams = [];
+        if (preg_match_all('/\{([^}]+)\}/', $routePattern, $paramMatches)) {
+            foreach ($paramMatches[1] as $index => $paramName) {
+                $pathParams[$paramName] = $index;
+            }
+        }
+        
+        // Build regex pattern to match the route (use # as delimiter to avoid conflicts with /)
+        $regexPattern = preg_quote($routePattern, '#');
+        $regexPattern = preg_replace('#\\\{([^}]+)\\\}#', '([^/]+)', $regexPattern);
+        $regexPattern = '#^' . $regexPattern . '$#';
+        
+        // Match actual path against pattern
+        if (preg_match($regexPattern, $httpRequest->getPath(), $matches)) {
+            // Map captured groups to parameter names
+            foreach ($pathParams as $paramName => $groupIndex) {
+                $captureIndex = $groupIndex + 1; // First match is full string
+                if (isset($matches[$captureIndex])) {
+                    $params[$paramName] = $matches[$captureIndex];
+                }
+            }
+        }
+        
+        // Map to property names using PathParam attributes
+        $mappedParams = [];
+        foreach ($reflection->getProperties(ReflectionProperty::IS_PUBLIC) as $property) {
+            $pathParamAttrs = $property->getAttributes(PathParam::class);
+            if (empty($pathParamAttrs)) {
+                continue;
+            }
+            
+            $pathParamAttr = $pathParamAttrs[0]->newInstance();
+            $paramName = $pathParamAttr->name ?? $property->getName();
+            
+            if (isset($params[$paramName])) {
+                $mappedParams[$property->getName()] = $params[$paramName];
+            }
+        }
+        
+        return $mappedParams;
     }
     
     /**
@@ -71,10 +173,17 @@ class RequestDtoHydrator
         
         // 1. Parse JSON body if Content-Type is application/json (highest priority)
         // Swoole doesn't populate ->post for JSON requests, so we parse from raw content
-        if ($httpRequest->isJson()) {
+        if ($httpRequest->isJson() && $httpRequest->getContent()) {
             $jsonData = $httpRequest->getJsonBody();
             if ($jsonData !== null) {
                 $data = array_merge($data, $jsonData);
+            } else {
+                // Fallback: try to parse content directly if getJsonBody() failed
+                $content = $httpRequest->getContent();
+                $decoded = json_decode($content, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    $data = array_merge($data, $decoded);
+                }
             }
         } else {
             // 2. Add POST data (form-urlencoded, multipart/form-data)

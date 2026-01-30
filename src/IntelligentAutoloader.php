@@ -36,6 +36,7 @@ class IntelligentAutoloader
     }
     private static array $allowedNamespacePrefixes = [
         'Syntexa\\' => true,
+        'Syntexa\\Modules\\' => true,
     ];
     
     /**
@@ -213,6 +214,7 @@ class IntelligentAutoloader
         $classes = [];
         $classMapSize = count(self::$classMap);
         
+        // First, check classes in classMap
         foreach (self::$classMap as $className => $filePath) {
             
             // Load class if not already loaded
@@ -243,7 +245,37 @@ class IntelligentAutoloader
             }
         }
         
-        return $classes;
+        // Also check already loaded classes that might not be in classMap yet
+        // This is useful for classes loaded via Composer autoloader
+        $declaredClasses = get_declared_classes();
+        foreach ($declaredClasses as $className) {
+            // Only check Syntexa classes
+            if (!str_starts_with($className, 'Syntexa\\')) {
+                continue;
+            }
+            
+            // Skip if already found
+            if (in_array($className, $classes)) {
+                continue;
+            }
+            
+            // Skip if not in allowed namespace
+            if (!self::isNamespaceAllowed($className)) {
+                continue;
+            }
+            
+            try {
+                $reflection = new \ReflectionClass($className);
+                
+                if ($reflection->getAttributes($attributeClass)) {
+                    $classes[] = $className;
+                }
+            } catch (\Throwable $e) {
+                // Skip classes that can't be reflected
+            }
+        }
+        
+        return array_unique($classes);
     }
     
     /**
