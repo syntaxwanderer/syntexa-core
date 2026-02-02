@@ -272,25 +272,33 @@ class Application
                                 $resDto->setHeader('Content-Type', 'application/json');
                             }
                         } elseif ($format === \Syntexa\Core\Http\Response\ResponseFormat::Layout) {
-                            // Use provided renderer or default LayoutRenderer
+                            // Use provided renderer or default LayoutRenderer (from syntexa/core-frontend)
                             $renderer = $rendererClass ?: 'Syntexa\\Frontend\\Layout\\LayoutRenderer';
-                            if (class_exists($renderer) && method_exists($renderer, 'renderHandle')) {
-                                // Automatically wrap context in 'response' key if not already present
-                                // This allows templates to access context as response.error, response.data, etc.
-                                if (!isset($context['response'])) {
-                                    $context = ['response' => $context] + $context;
-                                }
-                                // Add request to context if available
-                                if (!isset($context['request']) && isset($reqDto)) {
-                                    $context['request'] = $reqDto;
-                                }
-                                $html = $renderer::renderHandle($handle, $context);
-                                if (method_exists($resDto, 'setContent')) {
-                                    $resDto->setContent($html);
-                                }
-                                if (method_exists($resDto, 'setHeader')) {
-                                    $resDto->setHeader('Content-Type', 'text/html; charset=utf-8');
-                                }
+                            if (!class_exists($renderer)) {
+                                throw new \RuntimeException(
+                                    'LayoutRenderer not found. For HTML pages install syntexa/core-frontend: composer require syntexa/core-frontend. Do not implement a custom Twig renderer in the project.'
+                                );
+                            }
+                            if (!method_exists($renderer, 'renderHandle')) {
+                                throw new \RuntimeException(
+                                    'LayoutRenderer::renderHandle not found. Use syntexa/core-frontend for HTML rendering. Do not implement a custom renderer in the project.'
+                                );
+                            }
+                            // Automatically wrap context in 'response' key if not already present
+                            // This allows templates to access context as response.error, response.data, etc.
+                            if (!isset($context['response'])) {
+                                $context = ['response' => $context] + $context;
+                            }
+                            // Add request to context if available
+                            if (!isset($context['request']) && isset($reqDto)) {
+                                $context['request'] = $reqDto;
+                            }
+                            $html = $renderer::renderHandle($handle, $context);
+                            if (method_exists($resDto, 'setContent')) {
+                                $resDto->setContent($html);
+                            }
+                            if (method_exists($resDto, 'setHeader')) {
+                                $resDto->setHeader('Content-Type', 'text/html; charset=utf-8');
                             }
                         } else {
                             // raw/no-op

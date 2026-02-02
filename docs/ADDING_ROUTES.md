@@ -90,14 +90,18 @@ Request/Handler classes in the project folder `src/` (namespace `App\`) are **no
 
 ## Responses: JSON and HTML pages
 
-The step-by-step example above uses `Response::json([...])` — suitable for API endpoints. For **HTML pages** the framework recommends the **Response DTO + Twig** pattern:
+The step-by-step example above uses `Response::json([...])` — suitable for API endpoints. For **HTML pages** use **only** the **syntexa/core-frontend** package (Twig, layouts). **Do not implement your own Twig renderer in the project** — install core-frontend and use its patterns.
 
-- Create a Response class with the attribute `#[AsResponse(template: 'path/to/file.html.twig')]`.
-- Store templates in the module under `Application/View/templates/` (or your project’s convention).
-- The Handler fills the response context and returns the Response DTO; the framework renders the Twig template.
-- The **core-frontend** package provides Twig integration and layouts.
+**Steps for HTML pages:**
 
-**Detailed docs:** in the **syntexa/docs** package — sections on Request/Response/Handler and Twig/templates. When installed: `vendor/syntexa/docs/AI_REFERENCE.md`, `vendor/syntexa/docs/guides/CONVENTIONS.md`, `vendor/syntexa/docs/guides/EXAMPLES.md`. Do not put raw HTML in the Handler — use Response DTO + Twig.
+1. **Install the package:** `composer require syntexa/core-frontend` (or the actual package name in your repository).
+2. Create a Response class with the attribute `#[AsResponse(template: 'path/to/file.html.twig')]`.
+3. Store templates in the module under `Application/View/templates/` (or your project’s convention).
+4. The Handler fills the response context and returns the Response DTO; the framework uses core-frontend’s LayoutRenderer to render the Twig template.
+
+**Recommended stack:** for HTML apps use syntexa/core + syntexa/core-frontend only — see `vendor/syntexa/docs/RECOMMENDED_STACK.md` when syntexa/docs is installed.
+
+**Detailed docs:** in the **syntexa/docs** package — sections on Request/Response/Handler and Twig/templates. When installed: `vendor/syntexa/docs/AI_REFERENCE.md`, `vendor/syntexa/docs/guides/CONVENTIONS.md`, `vendor/syntexa/docs/guides/EXAMPLES.md`. Do not put raw HTML in the Handler and do not create a custom renderer — use Response DTO + core-frontend.
 
 ---
 
