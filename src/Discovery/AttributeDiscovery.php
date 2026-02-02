@@ -390,7 +390,7 @@ class AttributeDiscovery
                 if (empty($attrs)) {
                     continue;
                 }
-                /** @var AsResponse $attr */
+                /** @var AsResponse $attr — read by property name only; attribute argument order in source does not matter */
                 $attr = $attrs[0]->newInstance();
                 $meta = [
                     'class' => $className,
@@ -402,7 +402,7 @@ class AttributeDiscovery
                         'format' => $attr->format,
                         'renderer' => $attr->renderer !== null ? EnvValueResolver::resolve($attr->renderer) : null,
                         'context' => $attr->context ?? [],
-                        'base' => $attr->base ? ltrim($attr->base, '\\') : null,
+                        'base' => $attr->base !== null && $attr->base !== '' ? ltrim($attr->base, '\\') : null,
                     ],
                 ];
                 $responseMeta[$className] = $meta;
@@ -464,12 +464,25 @@ class AttributeDiscovery
 
     private static function applyResponseDefaults(array $attr, string $shortName, string $className): array
     {
+        $handle = $attr['handle'] ?? self::defaultLayoutHandleFromShortName($shortName);
         return [
-            'handle' => $attr['handle'] ?? $shortName,
+            'handle' => $handle,
             'format' => $attr['format'] ?? null,
             'renderer' => $attr['renderer'] ?? null,
             'context' => $attr['context'] ?? [],
         ];
+    }
+
+    /**
+     * Default layout/template handle from Response class short name.
+     * "AboutResponse" -> "about", "HomeResponse" -> "home", so it matches pages/{handle}.html.twig.
+     */
+    private static function defaultLayoutHandleFromShortName(string $shortName): string
+    {
+        if (str_ends_with($shortName, 'Response')) {
+            $shortName = substr($shortName, 0, -8);
+        }
+        return strtolower(ltrim(preg_replace('/[A-Z]/', '-$0', $shortName), '-'));
     }
 
     private static function canonicalResponseClass(?string $class): ?string
