@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Discovery;
 
-use Semitexa\Core\Attributes\AsRequest;
-use Semitexa\Core\Attributes\AsRequestHandler;
-use Semitexa\Core\Attributes\AsResponseOverride;
+use Semitexa\Core\Attributes\AsPayload;
+use Semitexa\Core\Attributes\AsPayloadHandler;
+use Semitexa\Core\Attributes\AsResource;
+use Semitexa\Core\Attributes\AsResourceOverride;
 use Semitexa\Core\Config\EnvValueResolver;
 use Semitexa\Core\ModuleRegistry;
 use Semitexa\Core\IntelligentAutoloader;
@@ -153,10 +154,10 @@ class AttributeDiscovery
         // Preload module Handler classes to ensure they're in classMap
         self::preloadModuleHandlerClasses();
         
-        // Find all classes with AsRequest attribute
+        // Find all classes with AsPayload attribute
         // Note: preloadModuleRequestClasses is already called in initialize()
         $httpRequestClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsRequest::class),
+            IntelligentAutoloader::findClassesWithAttribute(AsPayload::class),
             fn ($class) => str_starts_with($class, 'Semitexa\\') && self::isModuleActiveForClass($class)
         );
         $requestMeta = [];
@@ -164,11 +165,11 @@ class AttributeDiscovery
         foreach ($httpRequestClasses as $className) {
             try {
                 $class = new ReflectionClass($className);
-                $attrs = $class->getAttributes(AsRequest::class);
+                $attrs = $class->getAttributes(AsPayload::class);
                 if (empty($attrs)) {
                     continue;
                 }
-                /** @var AsRequest $attr */
+                /** @var AsPayload $attr */
                 $attr = $attrs[0]->newInstance();
                 $meta = [
                     'class' => $className,
@@ -186,6 +187,7 @@ class AttributeDiscovery
                         'public' => $attr->public,
                         'responseWith' => $attr->responseWith !== null ? EnvValueResolver::resolve($attr->responseWith) : null,
                         'base' => $attr->base ? ltrim($attr->base, '\\') : null,
+                        'overrides' => $attr->overrides ? ltrim($attr->overrides, '\\') : null,
                     ],
                 ];
                 $requestMeta[$className] = $meta;
@@ -199,22 +201,39 @@ class AttributeDiscovery
         // Process responses before finalizing requests
         self::processResponseAttributes();
 
-        foreach ($requestGroups as $baseClass => $candidates) {
-            $projectCandidates = array_values(array_filter($candidates, fn ($c) => self::isProjectRequest($c['file'])));
-            // If no project candidates, also include src/modules candidates (for module routes)
-            if (empty($projectCandidates)) {
-                $projectCandidates = array_values(array_filter($candidates, fn ($c) => str_contains($c['file'], '/src/modules/') || str_contains($c['file'], '/packages/semitexa/')));
+        // Build flat list of all requests with resolved path/methods, then group by route and apply override chain
+        $resolvedCache = [];
+        $byRoute = [];
+        foreach (array_keys($requestMeta) as $className) {
+            try {
+                $resolved = self::resolveRequestAttributes($className, $requestMeta, $resolvedCache);
+                $meta = $requestMeta[$className];
+                $overrides = $meta['attr']['overrides'] ?? null;
+                $methods = (array) ($resolved['methods'] ?? ['GET']);
+                sort($methods);
+                $routeKey = $resolved['path'] . "\0" . implode(',', array_map('strtoupper', $methods));
+                $byRoute[$routeKey][] = [
+                    'class' => $className,
+                    'file' => $meta['file'],
+                    'priority' => $meta['priority'],
+                    'overrides' => $overrides,
+                    'resolved' => $resolved,
+                ];
+            } catch (\Throwable $e) {
+                // Skip invalid
             }
-            if (empty($projectCandidates)) {
+        }
+
+        foreach ($byRoute as $routeKey => $candidates) {
+            $selected = self::selectRequestByOverrideChain($candidates);
+            if ($selected === null) {
                 continue;
             }
-            usort($projectCandidates, fn ($a, $b) => $b['priority'] <=> $a['priority']);
-            $selected = $projectCandidates[0];
+            $resolved = $selected['resolved'];
+            $class = $selected['class'];
 
-            $resolved = self::resolveRequestAttributes($selected['class'], $requestMeta);
-
-            self::$httpRequests[$selected['class']] = [
-                'requestClass' => $selected['class'],
+            self::$httpRequests[$class] = [
+                'requestClass' => $class,
                 'path' => $resolved['path'],
                 'methods' => $resolved['methods'],
                 'name' => $resolved['name'],
@@ -227,7 +246,7 @@ class AttributeDiscovery
                 'path' => $resolved['path'],
                 'methods' => $resolved['methods'],
                 'name' => $resolved['name'],
-                'class' => $selected['class'],
+                'class' => $class,
                 'method' => '__invoke',
                 'requirements' => $resolved['requirements'],
                 'defaults' => $resolved['defaults'],
@@ -237,27 +256,26 @@ class AttributeDiscovery
                 'type' => 'http-request'
             ];
 
-
             foreach ($candidates as $candidate) {
-                self::$requestClassAliases[$candidate['class']] = $selected['class'];
+                self::$requestClassAliases[$candidate['class']] = $class;
             }
         }
 
-        // Apply response overrides from src (AsResponseOverride) — only render hints, not class swap
+        // Apply response overrides from src (AsResourceOverride) — only render hints, not class swap
         self::collectResponseOverrides();
 
         // Find handlers and map to requests (Semitexa packages + project App\ handlers)
         $httpHandlerClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsRequestHandler::class),
+            IntelligentAutoloader::findClassesWithAttribute(AsPayloadHandler::class),
             fn ($class) => (str_starts_with($class, 'Semitexa\\') && self::isModuleActiveForClass($class))
                 || self::isProjectHandler($class)
         );
         foreach ($httpHandlerClasses as $className) {
             try {
                 $class = new ReflectionClass($className);
-                $attrs = $class->getAttributes(AsRequestHandler::class);
+                $attrs = $class->getAttributes(AsPayloadHandler::class);
                 if (!empty($attrs)) {
-                    /** @var AsRequestHandler $attr */
+                    /** @var AsPayloadHandler $attr */
                     $attr = $attrs[0]->newInstance();
                     $for = $attr->for;
                     if (isset(self::$requestClassAliases[$for])) {
@@ -374,7 +392,7 @@ class AttributeDiscovery
     private static function processResponseAttributes(): void
     {
         $responseClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsResponse::class),
+            IntelligentAutoloader::findClassesWithAttribute(AsResource::class),
             fn ($class) => str_starts_with($class, 'Semitexa\\')
         );
         if (empty($responseClasses)) {
@@ -386,11 +404,11 @@ class AttributeDiscovery
         foreach ($responseClasses as $className) {
             try {
                 $class = new ReflectionClass($className);
-                $attrs = $class->getAttributes(AsResponse::class);
+                $attrs = $class->getAttributes(AsResource::class);
                 if (empty($attrs)) {
                     continue;
                 }
-                /** @var AsResponse $attr — read by property name only; attribute argument order in source does not matter */
+                /** @var AsResource $attr — read by property name only; attribute argument order in source does not matter */
                 $attr = $attrs[0]->newInstance();
                 $meta = [
                     'class' => $className,
@@ -499,6 +517,49 @@ class AttributeDiscovery
         return self::$resolvedResponseAttrs[$canonical] ?? null;
     }
 
+    /**
+     * Select the single Request for a route using override chain rules.
+     * Only the current chain head can be overridden; otherwise throws.
+     *
+     * @param list<array{class: string, file: string, priority: int, overrides: ?string, resolved: array}> $candidates
+     * @return array{class: string, file: string, priority: int, resolved: array}|null
+     */
+    private static function selectRequestByOverrideChain(array $candidates): ?array
+    {
+        if (empty($candidates)) {
+            return null;
+        }
+        usort($candidates, fn ($a, $b) => $a['priority'] <=> $b['priority']);
+
+        $head = null;
+        foreach ($candidates as $c) {
+            $overrides = $c['overrides'];
+            if ($overrides === null || $overrides === '') {
+                if ($head !== null) {
+                    $head = $c['priority'] > $head['priority'] ? $c : $head;
+                } else {
+                    $head = $c;
+                }
+                continue;
+            }
+            if ($head === null) {
+                throw new \RuntimeException(
+                    "Request {$c['class']} declares overrides of {$overrides}, but there is no request for this route to override. " .
+                    "Remove the overrides attribute or ensure the target request exists for the same path/methods."
+                );
+            }
+            $headClass = $head['class'];
+            if ($overrides !== $headClass) {
+                throw new \RuntimeException(
+                    "Request override chain violation: {$c['class']} tries to override {$overrides}, but the current head for this route is {$headClass}. " .
+                    "You can only override the current head. Use overrides: {$headClass}::class to extend the chain."
+                );
+            }
+            $head = $c;
+        }
+        return $head;
+    }
+
     private static function determineSourcePriority(string $file): int
     {
         if ($file === '') {
@@ -544,13 +605,13 @@ class AttributeDiscovery
     }
 
     /**
-     * Collect response overrides declared with AsResponseOverride.
+     * Collect response overrides declared with AsResourceOverride.
      * Store class replacement and attribute overrides for later usage.
      */
     private static function collectResponseOverrides(): void
     {
         $overrideClasses = array_filter(
-            IntelligentAutoloader::findClassesWithAttribute(AsResponseOverride::class),
+            IntelligentAutoloader::findClassesWithAttribute(AsResourceOverride::class),
             fn ($class) => str_starts_with($class, 'Semitexa\\')
         );
         if (empty($overrideClasses)) {
@@ -565,11 +626,11 @@ class AttributeDiscovery
                 if (!$isProjectSrc) {
                     continue;
                 }
-                $attrs = $rc->getAttributes(AsResponseOverride::class);
+                $attrs = $rc->getAttributes(AsResourceOverride::class);
                 if (empty($attrs)) {
                     continue;
                 }
-                /** @var AsResponseOverride $o */
+                /** @var AsResourceOverride $o */
                 $o = $attrs[0]->newInstance();
                 $overrides[] = ['meta' => $o, 'file' => $file, 'class' => $className];
             } catch (\Throwable $e) {
@@ -583,7 +644,7 @@ class AttributeDiscovery
             return ($b['meta']->priority ?? 0) <=> ($a['meta']->priority ?? 0);
         });
         foreach ($overrides as $ov) {
-            /** @var AsResponseOverride $meta */
+            /** @var AsResourceOverride $meta */
             $meta = $ov['meta'];
             $target = $meta->of;
             $attrs = [];
@@ -724,8 +785,8 @@ class AttributeDiscovery
             if ($file->isFile() && $file->getExtension() === 'php') {
                 $content = file_get_contents($file->getPathname());
                 
-                // Check if file contains AsRequest attribute and Request in class name
-                if (strpos($content, 'AsRequest') !== false && 
+                // Check if file contains AsPayload attribute and Request in class name
+                if (strpos($content, 'AsPayload') !== false &&
                     strpos($content, 'Request') !== false &&
                     preg_match('/namespace\s+([^;]+);/', $content, $nsMatches) &&
                     preg_match('/class\s+(\w+Request)/', $content, $classMatches)) {
@@ -804,8 +865,8 @@ class AttributeDiscovery
             if ($file->isFile() && $file->getExtension() === 'php') {
                 $content = file_get_contents($file->getPathname());
                 
-                // Check if file contains AsRequestHandler attribute and Handler in class name
-                if (strpos($content, 'AsRequestHandler') !== false && 
+                // Check if file contains AsPayloadHandler attribute and Handler in class name
+                if (strpos($content, 'AsPayloadHandler') !== false &&
                     strpos($content, 'Handler') !== false &&
                     preg_match('/namespace\s+([^;]+);/', $content, $nsMatches) &&
                     preg_match('/class\s+(\w+Handler)/', $content, $classMatches)) {

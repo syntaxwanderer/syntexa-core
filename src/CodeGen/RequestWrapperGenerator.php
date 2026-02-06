@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Semitexa\Core\CodeGen;
 
 use ReflectionClass;
-use Semitexa\Core\Attributes\AsRequest;
-use Semitexa\Core\Attributes\AsRequestPart;
+use Semitexa\Core\Attributes\AsPayload;
+use Semitexa\Core\Attributes\AsPayloadPart;
 use Semitexa\Core\Config\EnvValueResolver;
 use Semitexa\Core\IntelligentAutoloader;
 use Semitexa\Core\ModuleRegistry;
@@ -71,11 +71,11 @@ class RequestWrapperGenerator
     private static function collectRequestDefinitions(): array
     {
         $definitions = [];
-        $classes = IntelligentAutoloader::findClassesWithAttribute(AsRequest::class);
+        $classes = IntelligentAutoloader::findClassesWithAttribute(AsPayload::class);
 
         foreach ($classes as $className) {
             $reflection = new ReflectionClass($className);
-            $attr = $reflection->getAttributes(AsRequest::class)[0]->newInstance();
+            $attr = $reflection->getAttributes(AsPayload::class)[0]->newInstance();
             $definitions[$className] = [
                 'class' => $className,
                 'short' => $reflection->getShortName(),
@@ -98,16 +98,16 @@ class RequestWrapperGenerator
     private static function collectRequestParts(string $baseClass): array
     {
         $parts = [];
-        $classes = IntelligentAutoloader::findClassesWithAttribute(AsRequestPart::class);
+        $classes = IntelligentAutoloader::findClassesWithAttribute(AsPayloadPart::class);
 
         foreach ($classes as $className) {
             $reflection = new ReflectionClass($className);
             if ($reflection->isTrait() === false) {
                 continue;
             }
-            $attributes = $reflection->getAttributes(AsRequestPart::class);
+            $attributes = $reflection->getAttributes(AsPayloadPart::class);
             foreach ($attributes as $attribute) {
-                /** @var AsRequestPart $meta */
+                /** @var AsPayloadPart $meta */
                 $meta = $attribute->newInstance();
                 if ($meta->base === $baseClass) {
                     $parts[] = [
@@ -191,7 +191,7 @@ class RequestWrapperGenerator
     {
         $projectRoot = dirname(__DIR__, 5);
         $moduleStudly = $target['module']['studly'] ?? 'Project';
-        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Input';
+        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Payload';
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0777, true);
         }
@@ -241,7 +241,7 @@ class RequestWrapperGenerator
 
     private static function renderTemplate(array $target, array $traits): string
     {
-        /** @var AsRequest $attr */
+        /** @var AsPayload $attr */
         $attr = $target['attr'];
         $imports = [];
         $usedAliases = [];
@@ -320,7 +320,7 @@ class RequestWrapperGenerator
         // Only extend if base class has own methods (not just traits)
         $extendsString = $baseHasOwnMethods ? "extends {$baseAlias}" : '';
 
-        $namespace = 'Semitexa\\Modules\\' . ($target['module']['studly'] ?? 'Project') . '\\Input';
+        $namespace = 'Semitexa\\Modules\\' . ($target['module']['studly'] ?? 'Project') . '\\Payload';
         $className = $target['short'];
 
         $header = <<<'PHP'
@@ -339,10 +339,10 @@ PHP;
         $body = <<<PHP
 namespace {$namespace};
 
-use Semitexa\Core\Attributes\AsRequest;
+use Semitexa\Core\Attributes\AsPayload;
 {$useBlock}
 
-#[AsRequest(
+#[AsPayload(
     {$attrString}
 )]
 class {$className}{$extendsString}{$implementsString}
@@ -398,9 +398,9 @@ PHP;
             ? substr($responseClass, strrpos($responseClass, '\\') + 1)
             : $responseClass;
 
-        $wrapperPath = $projectRoot . '/src/modules/' . $moduleStudly . '/Output/' . $short . '.php';
+        $wrapperPath = $projectRoot . '/src/modules/' . $moduleStudly . '/Resource/' . $short . '.php';
         if (is_file($wrapperPath)) {
-            return '\\Semitexa\\Modules\\' . $moduleStudly . '\\Output\\' . $short;
+            return '\\Semitexa\\Modules\\' . $moduleStudly . '\\Resource\\' . $short;
         }
 
         return '\\' . ltrim($responseClass, '\\');

@@ -1,0 +1,13 @@
+# Minimal Semitexa app: PHP + Swoole in Docker.
+# Start: bin/semitexa server:start | Stop: bin/semitexa server:stop
+services:
+  app:
+    build: .
+    container_name: semitexa-app
+    env_file: .env
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "${SWOOLE_PORT:-{{ default_swoole_port }}}:${SWOOLE_PORT:-{{ default_swoole_port }}}"
+    restart: unless-stopped
+    command: ["php", "server.php"]

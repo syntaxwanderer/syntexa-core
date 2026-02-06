@@ -12,17 +12,21 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
  * Scaffolds Semitexa project structure: bin/, public/, src/, var/, .env.example, server.php, bin/semitexa,
- * docker-compose.yml, Dockerfile, AI_ENTRY.md, README.md, docs, example Request/Handler, autoload in composer.json, one test.
+ * docker-compose.yml, Dockerfile, AI_ENTRY.md, README.md, var/docs (AI working dir only), phpunit.xml.dist, autoload in composer.json.
+ * Framework docs (CONVENTIONS, RUNNING, ADDING_ROUTES) live in vendor/semitexa/core/docs/ — not written into project.
  */
 class InitCommand extends Command
 {
+    /** Default Swoole port (single source of truth for .env.example, docker-compose, docs). */
+    private const DEFAULT_SWOOLE_PORT = 9502;
+
     protected function configure(): void
     {
         $this->setName('init')
-            ->setDescription('Create Semitexa project structure + AI_ENTRY, README, docs, example code, test')
+            ->setDescription('Create Semitexa project structure + AI_ENTRY, README, var/docs, phpunit.xml.dist')
             ->addOption('dir', 'd', InputOption::VALUE_REQUIRED, 'Target directory (default: current working directory)', null)
             ->addOption('force', 'f', InputOption::VALUE_NONE, 'Overwrite existing files')
-            ->addOption('only-docs', null, InputOption::VALUE_NONE, 'Only update AI_ENTRY.md and project docs (CONVENTIONS, ADDING_ROUTES, etc.) from template — for existing projects after upgrading semitexa/core');
+            ->addOption('only-docs', null, InputOption::VALUE_NONE, 'Only update AI_ENTRY.md, README, server.php, .env.example from template — for existing projects after upgrading semitexa/core');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -51,7 +55,6 @@ class InitCommand extends Command
             'src/modules',
             'src/infrastructure/database',
             'src/infrastructure/migrations',
-            'docs',
             'tests',
             'var/cache',
             'var/log',
@@ -90,13 +93,6 @@ class InitCommand extends Command
             'public/.htaccess' => $this->getHtaccessContent(),
             'docker-compose.yml' => $this->getDockerComposeContent(),
             'Dockerfile' => $this->getDockerfileContent(),
-            'docs/CONVENTIONS.md' => $this->getConventionsContent(),
-            'docs/DEPENDENCIES.md' => $this->getDependenciesContent(),
-            'docs/RUNNING.md' => $this->getRunningDocContent(),
-            'docs/ADDING_ROUTES.md' => $this->getAddingRoutesStubContent(),
-            'src/Request/HomeRequest.php' => $this->getHomeRequestContent(),
-            'src/Handler/HomeHandler.php' => $this->getHomeHandlerContent(),
-            'tests/HomeTest.php' => $this->getHomeTestContent(),
             'phpunit.xml.dist' => $this->getPhpunitXmlContent(),
         ];
 
@@ -151,30 +147,18 @@ class InitCommand extends Command
     }
 
     /**
-     * Update only AI_ENTRY.md and project docs from framework template (for existing projects after upgrading semitexa/core).
+     * Update only AI_ENTRY.md, README, server.php, .env.example from framework template (for existing projects after upgrading semitexa/core).
      */
     private function executeOnlyDocs(string $root, SymfonyStyle $io, bool $force): int
     {
         $io->title('Semitexa docs sync');
         $io->text('Project root: ' . $root);
 
-        if (!is_dir($root . '/docs')) {
-            if (!@mkdir($root . '/docs', 0755, true)) {
-                $io->error('Failed to create directory: docs/');
-                return Command::FAILURE;
-            }
-            $io->text('Created: docs/');
-        }
-
         $docFiles = [
             'AI_ENTRY.md' => $this->getAiEntryContent(),
             'README.md' => $this->getReadmeContent(),
             'server.php' => $this->getServerPhpContent(),
             '.env.example' => $this->getEnvExampleContent(),
-            'docs/CONVENTIONS.md' => $this->getConventionsContent(),
-            'docs/DEPENDENCIES.md' => $this->getDependenciesContent(),
-            'docs/RUNNING.md' => $this->getRunningDocContent(),
-            'docs/ADDING_ROUTES.md' => $this->getAddingRoutesStubContent(),
         ];
 
         $created = [];
@@ -203,7 +187,7 @@ class InitCommand extends Command
             $io->note('Skipped (exists): ' . $f . ' (use --force to overwrite)');
         }
 
-        $io->success('Docs and scaffold updated. AI_ENTRY, README, docs/, server.php, .env.example refreshed from framework template.');
+        $io->success('AI_ENTRY.md, README.md, server.php, .env.example updated from framework template.');
         $io->text('.env is never touched. Copy new vars from .env.example to .env if needed.');
         return Command::SUCCESS;
     }
@@ -237,7 +221,8 @@ class InitCommand extends Command
 
     private function getAiEntryContent(): string
     {
-        return <<<'MD'
+        $port = self::DEFAULT_SWOOLE_PORT;
+        return <<<MD
 # Semitexa Framework - AI Assistant Entry Point
 
 > **Guiding principle:** Make it work → Make it right → Make it fast.
@@ -246,40 +231,54 @@ class InitCommand extends Command
 
 - **bin/semitexa** – CLI
 - **public/** – web root
-- **src/** – application code; **new routes** go in **modules** (src/modules/), not in src/Request or src/Handler (App\ is not discovered for routes). See docs/CONVENTIONS.md and docs/ADDING_ROUTES.md.
+- **src/** – application code; **new routes** go in **modules** (src/modules/), not in src/Request or src/Handler (App\ is not discovered for routes).
 - **src/modules/** – application modules (where to add new pages and endpoints)
 - **var/log**, **var/cache** – runtime
-- **var/docs/** – working directory for AI: temporary notes, refactor plans, draft docs. Content not committed (`.gitignore`).
+- **var/docs/** – working directory for AI only: temporary notes, plans, drafts. Content not committed (`.gitignore`). **Do not create or use a docs/ folder in the project root.**
 - **AI_NOTES.md** – your own notes for AI (created once, never overwritten by the framework).
 - **vendor/semitexa/** – framework packages
 
-## Framework docs (in vendor)
+## Framework docs (in vendor — read these, do not copy into project)
 
 - **vendor/semitexa/docs/AI_REFERENCE.md** – main reference for AI; **before creating or changing module structure** read it → section **Module Structure** (Standard Module Layout).
-- **vendor/semitexa/core/docs/attributes/** – Request, Handler, Response attributes
-- **vendor/semitexa/core/docs/attributes/README.md** – attribute index
 - **vendor/semitexa/core/docs/ADDING_ROUTES.md** – how to add new pages/routes (modules only)
-
-## Conventions & dependencies
-
-- **docs/CONVENTIONS.md** – namespace, Request/Handler only in modules, semitexa commands
-- **docs/ADDING_ROUTES.md** – new pages/routes = only via modules
-- **docs/DEPENDENCIES.md** – semitexa/core version, where to find official docs
+- **vendor/semitexa/core/docs/RUNNING.md** – how to run the app (Docker)
+- **vendor/semitexa/core/docs/attributes/** – Request, Handler, Response attributes
+- **vendor/semitexa/docs/README.md** – package map; **vendor/semitexa/docs/guides/CONVENTIONS.md** – conventions (when semitexa/docs is installed)
 
 ## Quick start
 
-1. Read this file and docs/CONVENTIONS.md
-2. Run: `cp .env.example .env` then `bin/semitexa server:start` (Docker)
-3. Default URL: http://0.0.0.0:9501 (see .env SWOOLE_PORT). See docs/RUNNING.md for details.
+1. Read this file and vendor/semitexa/core/docs/ADDING_ROUTES.md
+2. Run (Docker):
+
+```bash
+cp .env.example .env
+```
+
+```bash
+bin/semitexa server:start
+```
+
+3. Default URL: http://0.0.0.0:{$port} (see .env SWOOLE_PORT). See vendor/semitexa/core/docs/RUNNING.md for details.
 MD;
     }
 
+    /**
+     * README template. Do not reference project-root docs/. Point to vendor docs; include a clear Documentation section for humans.
+     */
     private function getReadmeContent(): string
     {
-        return <<<'MD'
-# Semitexa App
+        $port = self::DEFAULT_SWOOLE_PORT;
+        return <<<MD
+# About Semitexa
 
-Minimal Semitexa Framework application.
+"Make it work, make it right, make it fast." — Kent Beck
+
+Semitexa isn't just a framework; it's a philosophy of efficiency.
+Engineered for the high-performance Swoole ecosystem and built with an AI-first mindset,
+it allows you to stop fighting the infrastructure and start building the future.
+
+Simple by design. Powerful by nature.
 
 ## Requirements
 
@@ -288,8 +287,21 @@ Minimal Semitexa Framework application.
 
 ## Install
 
+From an empty folder (get the framework and install dependencies):
+
+```bash
+composer require semitexa/core
+```
+
+From a clone or existing project (dependencies already in `composer.json`):
+
 ```bash
 composer install
+```
+
+Then:
+
+```bash
 cp .env.example .env
 ```
 
@@ -299,119 +311,45 @@ cp .env.example .env
 bin/semitexa server:start
 ```
 
-To stop: `bin/semitexa server:stop`.
+To stop:
 
-Default URL: **http://0.0.0.0:9501** (configurable via `.env` `SWOOLE_PORT`). See **docs/RUNNING.md** for details.
+```bash
+bin/semitexa server:stop
+```
+
+Default URL: **http://0.0.0.0:{$port}** (configurable via `.env` `SWOOLE_PORT`).
+
+## Documentation
+
+All framework documentation lives in `vendor/` (installed with Composer). Open these from the project root:
+
+| Topic | File or folder |
+|-------|----------------|
+| **Running the app** — Docker, ports, logs | [vendor/semitexa/core/docs/RUNNING.md](vendor/semitexa/core/docs/RUNNING.md) |
+| **Adding pages and routes** — modules, Request/Handler | [vendor/semitexa/core/docs/ADDING_ROUTES.md](vendor/semitexa/core/docs/ADDING_ROUTES.md) |
+| **Attributes** — AsPayload, AsPayloadHandler, AsResource, etc. | [vendor/semitexa/core/docs/attributes/README.md](vendor/semitexa/core/docs/attributes/README.md) |
+| **Package map & conventions** (if semitexa/docs is installed) | [vendor/semitexa/docs/README.md](vendor/semitexa/docs/README.md) · [vendor/semitexa/docs/guides/CONVENTIONS.md](vendor/semitexa/docs/guides/CONVENTIONS.md) |
+
+In your editor you can open these paths directly (e.g. Ctrl+P → paste path). No `docs/` folder in the project root — everything is in vendor.
 
 ## Structure
 
-- `src/Request/`, `src/Handler/` – example code only; **not** used for route discovery. New pages/routes go in **modules** (see docs/ADDING_ROUTES.md).
-- `src/modules/` – your modules (add new pages and endpoints here).
-- `var/docs/` – working directory for temporary/intermediate files (e.g. AI notes, plans, drafts); not committed.
-- `docs/CONVENTIONS.md` – coding conventions
-- `docs/ADDING_ROUTES.md` – how to add new pages/routes (modules only)
-- `docs/DEPENDENCIES.md` – Semitexa version and docs
-- `AI_ENTRY.md` – entry point for AI assistants
-- `AI_NOTES.md` – your own notes for AI (never overwritten by framework)
+- `src/modules/` – your application modules (add new pages and endpoints here). New routes only in modules.
+- `var/docs/` – working directory for notes and drafts; not committed.
+- `AI_ENTRY.md` – entry point for AI assistants; `AI_NOTES.md` – your notes (never overwritten).
 
 ## Tests
 
-`composer require --dev phpunit/phpunit` then `vendor/bin/phpunit`. See `tests/HomeTest.php` and `phpunit.xml.dist`.
+```bash
+composer require --dev phpunit/phpunit
+```
+
+```bash
+vendor/bin/phpunit
+```
+
+Use `phpunit.xml.dist`; add tests in `tests/`.
 MD;
-    }
-
-    private function getConventionsContent(): string
-    {
-        return <<<'MD'
-# Conventions
-
-- **Application namespace:** `App\` (for tests, helpers; **not** for routes — see below).
-- **Routes (Request/Handler):** **Only in modules** (`src/modules/`, `packages/`, or `vendor/`). Do **not** put new Request/Handler for pages or endpoints in project `src/Request/` or `src/Handler/` — they are **not** discovered. See **docs/ADDING_ROUTES.md** (or `vendor/semitexa/core/docs/ADDING_ROUTES.md`).
-- **Request/Handler in modules:** use `#[AsRequest(path: '...', methods: ['GET'])]` and `#[AsRequestHandler(for: SomeRequest::class)]`; handler method `handle(RequestInterface $request, ResponseInterface $response): ResponseInterface`.
-- **Response DTOs:** optional; or return `\Semitexa\Core\Response::json([...])` from handler.
-- **CLI:** `vendor/bin/semitexa` or `bin/semitexa` – `init`, `server:start`, `server:stop`, etc.
-- **Running:** Only via Docker: `bin/semitexa server:start` / `server:stop`. See docs/RUNNING.md.
-MD;
-    }
-
-    private function getDependenciesContent(): string
-    {
-        return <<<'MD'
-# Semitexa dependencies
-
-- **semitexa/core** – see `composer.json` for version; framework docs in `vendor/semitexa/core/docs/` (attributes, RUNNING.md, ADDING_ROUTES.md)
-- Running: Docker only – see `docs/RUNNING.md` or `vendor/semitexa/core/docs/RUNNING.md`
-- New routes: only via modules – see `docs/ADDING_ROUTES.md` or `vendor/semitexa/core/docs/ADDING_ROUTES.md`
-- Official repo: check Packagist or GitHub for `semitexa/core`
-MD;
-    }
-
-    private function getHomeRequestContent(): string
-    {
-        return <<<'PHP'
-<?php
-
-declare(strict_types=1);
-
-namespace App\Request;
-
-use Semitexa\Core\Attributes\AsRequest;
-use Semitexa\Core\Contract\RequestInterface;
-
-#[AsRequest(path: '/', methods: ['GET'])]
-class HomeRequest implements RequestInterface
-{
-}
-PHP;
-    }
-
-    private function getHomeHandlerContent(): string
-    {
-        return <<<'PHP'
-<?php
-
-declare(strict_types=1);
-
-namespace App\Handler;
-
-use Semitexa\Core\Attributes\AsRequestHandler;
-use Semitexa\Core\Contract\RequestInterface;
-use Semitexa\Core\Contract\ResponseInterface;
-use Semitexa\Core\Response;
-
-#[AsRequestHandler(for: \App\Request\HomeRequest::class)]
-class HomeHandler
-{
-    public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
-    {
-        return Response::json([
-            'message' => 'Hello from Semitexa!',
-            'path' => '/',
-        ]);
-    }
-}
-PHP;
-    }
-
-    private function getHomeTestContent(): string
-    {
-        return <<<'PHP'
-<?php
-
-declare(strict_types=1);
-
-namespace App\Tests;
-
-use PHPUnit\Framework\TestCase;
-
-class HomeTest extends TestCase
-{
-    public function test_home_returns_expected_structure(): void
-    {
-        $this->assertTrue(true, 'Bootstrap test; replace with real HTTP test when server is available');
-    }
-}
-PHP;
     }
 
     private function getPhpunitXmlContent(): string
@@ -438,7 +376,8 @@ XML;
 
     private function getEnvExampleContent(): string
     {
-        return <<<'ENV'
+        $port = self::DEFAULT_SWOOLE_PORT;
+        return <<<ENV
 # Environment: dev, test, prod
 APP_ENV=dev
 APP_DEBUG=1
@@ -446,7 +385,7 @@ APP_NAME="Semitexa App"
 
 # Swoole server
 SWOOLE_HOST=0.0.0.0
-SWOOLE_PORT=9501
+SWOOLE_PORT={$port}
 SWOOLE_WORKER_NUM=4
 SWOOLE_MAX_REQUEST=10000
 SWOOLE_MAX_COROUTINE=100000
@@ -578,22 +517,19 @@ HTA;
 
     private function getDockerComposeContent(): string
     {
-        return <<<'YAML'
-# Minimal Semitexa app: PHP + Swoole in Docker.
-# Start: bin/semitexa server:start | Stop: bin/semitexa server:stop
-services:
-  app:
-    build: .
-    container_name: semitexa-app
-    env_file: .env
-    volumes:
-      - .:/var/www/html
-    ports:
-      - "${SWOOLE_PORT:-9501}:9501"
-    restart: unless-stopped
-    command: ["php", "server.php"]
-
-YAML;
+        $templatePath = dirname(__DIR__, 3) . '/resources/init/docker-compose.yml';
+        if (!is_readable($templatePath)) {
+            // Fallback if package is not installed as source (e.g. from vendor)
+            $port = self::DEFAULT_SWOOLE_PORT;
+            return "# Minimal Semitexa app: PHP + Swoole in Docker.\n"
+                . "# Start: bin/semitexa server:start | Stop: bin/semitexa server:stop\n"
+                . "services:\n  app:\n    build: .\n    container_name: semitexa-app\n    env_file: .env\n"
+                . "    volumes:\n      - .:/var/www/html\n    ports:\n"
+                . "      - \"\${SWOOLE_PORT:-{$port}}:\${SWOOLE_PORT:-{$port}}\"\n"
+                . "    restart: unless-stopped\n    command: [\"php\", \"server.php\"]\n";
+        }
+        $content = file_get_contents($templatePath);
+        return str_replace('{{ default_swoole_port }}', (string) self::DEFAULT_SWOOLE_PORT, $content);
     }
 
     private function getDockerfileContent(): string
@@ -614,37 +550,6 @@ WORKDIR /var/www/html
 CMD ["php", "server.php"]
 
 DOCKER;
-    }
-
-    private function getRunningDocContent(): string
-    {
-        return <<<'MD'
-# Running the application
-
-The **only supported way** to run a Semitexa app is via Docker.
-
-- **Start:** `bin/semitexa server:start` (runs `docker compose up -d`)
-- **Stop:** `bin/semitexa server:stop` (runs `docker compose down`)
-- **Logs:** `docker compose logs -f`
-
-The app container runs `php server.php` inside Docker; the Swoole server listens on port 9501 (configurable via `.env` `SWOOLE_PORT`). Do not run `php server.php` on the host as the primary way to run the app.
-MD;
-    }
-
-    private function getAddingRoutesStubContent(): string
-    {
-        return <<<'MD'
-# Adding new pages and routes
-
-**New routes (pages, endpoints) in Semitexa are added only via modules.**  
-Request/Handler classes in project `src/Request/` or `src/Handler/` (namespace `App\`) are **not discovered** — do not add new routes there.
-
-- Create or use a **module** under `src/modules/{ModuleName}/` with a `composer.json` (`"type": "semitexa-module"` and PSR-4, e.g. `Semitexa\Modules\Website\` → `src/`).
-- Put Request and Handler classes in that module namespace; use `#[AsRequest]` and `#[AsRequestHandler]`.
-- Run `composer dump-autoload` in the project root after adding/changing a module.
-
-**Full guide:** `vendor/semitexa/core/docs/ADDING_ROUTES.md`
-MD;
     }
 
     /**

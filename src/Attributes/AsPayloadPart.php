@@ -7,15 +7,15 @@ namespace Semitexa\Core\Attributes;
 use Attribute;
 
 /**
- * Marks a trait (or helper class) as an extension part of a request DTO.
+ * Marks a trait (or helper class) as an extension part of a payload (request) DTO.
  *
- * Modules can provide request parts that will be combined into the final
+ * Modules can provide payload parts that will be combined into the final
  * project-specific request class during code generation.
- * 
+ *
  * @see DocumentedAttributeInterface
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsRequestPart implements DocumentedAttributeInterface
+class AsPayloadPart implements DocumentedAttributeInterface
 {
     use DocumentedAttributeTrait;
 
@@ -23,7 +23,7 @@ class AsRequestPart implements DocumentedAttributeInterface
 
     public function __construct(
         /**
-         * Fully-qualified class name of the base request that this part targets.
+         * Fully-qualified class name of the base payload/request that this part targets.
          */
         public string $base,
         ?string $doc = null
@@ -33,7 +33,6 @@ class AsRequestPart implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsRequestPart.md';
+        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsPayloadPart.md';
     }
 }
-

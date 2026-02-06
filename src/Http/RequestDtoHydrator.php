@@ -78,8 +78,8 @@ class RequestDtoHydrator
         $params = [];
         $reflection = new ReflectionClass($dto);
         
-        // Get route pattern from AsRequest attribute
-        $requestAttrs = $reflection->getAttributes(\Semitexa\Core\Attributes\AsRequest::class);
+        // Get route pattern from AsPayload attribute
+        $requestAttrs = $reflection->getAttributes(\Semitexa\Core\Attributes\AsPayload::class);
         if (empty($requestAttrs)) {
             return $params;
         }
@@ -88,7 +88,7 @@ class RequestDtoHydrator
             $requestAttr = $requestAttrs[0]->newInstance();
             $routePattern = $requestAttr->path ?? null;
         } catch (\Throwable $e) {
-            error_log("RequestDtoHydrator: Failed to get AsRequest attribute: " . $e->getMessage());
+            error_log("RequestDtoHydrator: Failed to get AsPayload attribute: " . $e->getMessage());
             return $params;
         }
         

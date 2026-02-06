@@ -8,11 +8,11 @@ use Attribute;
 use Semitexa\Core\Http\Response\ResponseFormat;
 
 /**
- * Declares an override for an existing AsResponse-decorated class.
+ * Declares an override for an existing AsResource-decorated class.
  * Can replace the class and/or adjust render hints.
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsResponseOverride
+class AsResourceOverride
 {
     public function __construct(
         public string $of,
@@ -23,5 +23,3 @@ class AsResponseOverride
         public int $priority = 0
     ) {}
 }
-
-

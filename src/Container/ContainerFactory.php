@@ -185,17 +185,13 @@ class ContainerFactory
             return new \Semitexa\UserDomain\Domain\Service\LoginAnalyticsService();
         });
 
-        // User repository - request-scoped (uses EntityManager)
-        // Check if project has custom repository (overlay architecture)
-        $projectRepoClass = 'Semitexa\Modules\UserDomain\Domain\Repository\UserRepository';
-        if (class_exists($projectRepoClass)) {
-            $definitions[\Semitexa\UserDomain\Domain\Repository\UserRepositoryInterface::class] = \DI\factory(function (\DI\Container $c) use ($projectRepoClass) {
-                return new $projectRepoClass($c->get(\Semitexa\Orm\Entity\EntityManager::class));
-            });
-        } else {
-            $definitions[\Semitexa\UserDomain\Domain\Repository\UserRepositoryInterface::class] = \DI\factory(function (\DI\Container $c) {
+        // User repository - request-scoped (uses EntityManager); can be overridden via #[Overrides(UserRepository::class)] in project src
+        $userRepoInterface = \Semitexa\UserDomain\Domain\Repository\UserRepositoryInterface::class;
+        $userRepoDefault = \Semitexa\UserDomain\Domain\Repository\UserRepository::class;
+        if (interface_exists($userRepoInterface) && class_exists($userRepoDefault)) {
+            $definitions[$userRepoInterface] = \DI\factory(function (\DI\Container $c) use ($userRepoDefault) {
                 $em = $c->get(\Semitexa\Orm\Entity\EntityManager::class);
-                return new \Semitexa\UserDomain\Domain\Repository\UserRepository($em);
+                return new $userRepoDefault($em);
             });
         }
 
@@ -210,8 +206,21 @@ class ContainerFactory
         // $definitions[\Semitexa\Core\Database\ConnectionPool::class] = \DI\create()
         //     ->constructor(\DI\get('db.config'));
 
-        // Add module-specific definitions here
-        // Modules can extend this via service providers
+        // Apply service overrides from project src (#[Overrides(CurrentHead::class)]); strict chain
+        $overridableDefaults = [];
+        if (interface_exists($userRepoInterface) && class_exists($userRepoDefault)) {
+            $overridableDefaults[$userRepoInterface] = $userRepoDefault;
+        }
+        if ($overridableDefaults !== []) {
+            try {
+                $registry = new ServiceOverrideRegistry(self::getProjectRoot(), $overridableDefaults);
+                foreach ($registry->getOverrides() as $contract => $impl) {
+                    $definitions[$contract] = \DI\autowire($impl);
+                }
+            } catch (\Throwable $e) {
+                throw $e;
+            }
+        }
 
         return $definitions;
     }

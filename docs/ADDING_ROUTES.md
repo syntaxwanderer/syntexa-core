@@ -79,7 +79,7 @@ Request/Handler classes in the project folder `src/` (namespace `App\`) are **no
    }
    ```
 
-   Use the **recommended** layout from **vendor/semitexa/docs/AI_REFERENCE.md** → **Module Structure** (Standard Module Layout): `Application/Input/` (Request DTOs), `Application/Output/` (Response DTOs), `Application/Handler/Request/` (HTTP handlers), `Application/View/templates/` (Twig). Do not rely only on core/docs for folder names — read AI_REFERENCE first. The class must live under the **module namespace** (`Semitexa\Modules\Website\...`) and the module must have a valid `composer.json` with `"type": "semitexa-module"` and PSR-4 autoload.
+   Use the **recommended** layout from **vendor/semitexa/docs/AI_REFERENCE.md** → **Module Structure** (Standard Module Layout): `Application/Payload/` (Request DTOs), `Application/Resource/` (Response DTOs), `Application/Handler/Request/` (HTTP handlers), `Application/View/templates/` (Twig). Do not rely only on core/docs for folder names — read AI_REFERENCE first. The class must live under the **module namespace** (`Semitexa\Modules\Website\...`) and the module must have a valid `composer.json` with `"type": "semitexa-module"` and PSR-4 autoload.
 
    The example above returns JSON. **For HTML pages** use a Response DTO with a Twig template — see the section **"Responses: JSON and HTML pages"** below (or AI_REFERENCE / guides in semitexa/docs).
 

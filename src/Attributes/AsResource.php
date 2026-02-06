@@ -8,14 +8,14 @@ use Semitexa\Core\Http\Response\ResponseFormat;
 use Attribute;
 
 /**
- * Marks a class as a response DTO.
+ * Marks a class as a resource DTO (for template/JSON response).
  * All parameters are matched by name; order in source does not matter.
- * Single positional value (e.g. #[AsResponse('about')]) sets handle.
+ * Single positional value (e.g. #[AsResource('about')]) sets handle.
  *
  * @see DocumentedAttributeInterface
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsResponse implements DocumentedAttributeInterface
+class AsResource implements DocumentedAttributeInterface
 {
     use DocumentedAttributeTrait;
 
@@ -34,8 +34,6 @@ class AsResponse implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsResponse.md';
+        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsResource.md';
     }
 }
-
-

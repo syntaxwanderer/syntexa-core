@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Semitexa\Core\CodeGen;
 
 use ReflectionClass;
-use Semitexa\Core\Attributes\AsResponse;
-use Semitexa\Core\Attributes\AsResponsePart;
+use Semitexa\Core\Attributes\AsResource;
+use Semitexa\Core\Attributes\AsResourcePart;
 use Semitexa\Core\Config\EnvValueResolver;
 use Semitexa\Core\IntelligentAutoloader;
 use Semitexa\Core\ModuleRegistry;
@@ -62,11 +62,11 @@ class ResponseWrapperGenerator
     private static function collectResponseDefinitions(): array
     {
         $definitions = [];
-        $classes = IntelligentAutoloader::findClassesWithAttribute(AsResponse::class);
+        $classes = IntelligentAutoloader::findClassesWithAttribute(AsResource::class);
 
         foreach ($classes as $className) {
             $reflection = new ReflectionClass($className);
-            $attrs = $reflection->getAttributes(AsResponse::class);
+            $attrs = $reflection->getAttributes(AsResource::class);
             if (empty($attrs)) {
                 continue;
             }
@@ -93,16 +93,16 @@ class ResponseWrapperGenerator
     private static function collectResponseParts(string $baseClass): array
     {
         $parts = [];
-        $classes = IntelligentAutoloader::findClassesWithAttribute(AsResponsePart::class);
+        $classes = IntelligentAutoloader::findClassesWithAttribute(AsResourcePart::class);
 
         foreach ($classes as $className) {
             $reflection = new ReflectionClass($className);
             if ($reflection->isTrait() === false) {
                 continue;
             }
-            $attributes = $reflection->getAttributes(AsResponsePart::class);
+            $attributes = $reflection->getAttributes(AsResourcePart::class);
             foreach ($attributes as $attribute) {
-                /** @var AsResponsePart $meta */
+                /** @var AsResourcePart $meta */
                 $meta = $attribute->newInstance();
                 if ($meta->base === $baseClass) {
                     $parts[] = [
@@ -210,7 +210,7 @@ class ResponseWrapperGenerator
     {
         $projectRoot = dirname(__DIR__, 5);
         $moduleStudly = $target['module']['studly'] ?? 'Project';
-        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Output';
+        $outputDir = $projectRoot . '/src/modules/' . $moduleStudly . '/Resource';
         if (!is_dir($outputDir)) {
             mkdir($outputDir, 0777, true);
         }
@@ -236,7 +236,7 @@ class ResponseWrapperGenerator
 
     private static function renderTemplate(array $target, array $traits): string
     {
-        /** @var AsResponse $attr */
+        /** @var AsResource $attr */
         $attr = $target['attr'];
         $imports = [];
         $usedAliases = [];
@@ -283,7 +283,7 @@ class ResponseWrapperGenerator
         // Wrapper extends base class to inherit all methods
         $extendsString = "extends {$baseAlias}";
 
-        $namespace = 'Semitexa\\Modules\\' . ($target['module']['studly'] ?? 'Project') . '\\Output';
+        $namespace = 'Semitexa\\Modules\\' . ($target['module']['studly'] ?? 'Project') . '\\Resource';
         $className = $target['short'];
 
         $comment = <<<PHP
@@ -310,10 +310,10 @@ $useBlock = empty($useLines) ? '' : implode("\n", $useLines) . "\n";
 $body = <<<PHP
 namespace {$namespace};
 
-use Semitexa\Core\Attributes\AsResponse;
+use Semitexa\Core\Attributes\AsResource;
 {$useBlock}
 {$comment}
-#[AsResponse(
+#[AsResource(
     {$attrString}
 )]
 class {$className} {$extendsString}{$implementsString}

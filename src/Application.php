@@ -11,13 +11,18 @@ use Semitexa\Core\Tenancy\TenantResolver;
 use Semitexa\Core\Tenancy\TenantContext;
 use DI\Container;
 use Semitexa\Core\Container\RequestScopedContainer;
-use Semitexa\Inspector\Profiler;
-
 /**
  * Minimal Semitexa Application
  */
 class Application
 {
+    private static function measure(string $label, callable $fn): mixed
+    {
+        if (class_exists(\Semitexa\Inspector\Profiler::class)) {
+            return \Semitexa\Inspector\Profiler::measure($label, $fn);
+        }
+        return $fn();
+    }
     private Environment $environment;
     private Container $container;
     private RequestScopedContainer $requestScopedContainer;
@@ -46,7 +51,7 @@ class Application
     
     public function handleRequest(Request $request): Response
     {
-        return Profiler::measure('Application::handleRequest', function() use ($request) {
+        return self::measure('Application::handleRequest', function() use ($request) {
             $runId = 'initial';
         $segmentStart = microtime(true);
         $this->debugLog('H1', 'Application::handleRequest', 'request_received', [
@@ -95,7 +100,7 @@ class Application
     
     private function handleRoute(array $route, Request $request): Response
     {
-        return Profiler::measure('Application::handleRoute', function() use ($route, $request) {
+        return self::measure('Application::handleRoute', function() use ($route, $request) {
             try {
             // Request/Handler flow
             if (($route['type'] ?? null) === 'http-request') {
@@ -134,7 +139,7 @@ class Application
                     $resDto = new \Semitexa\Core\Http\Response\GenericResponse();
                 }
 
-                // Apply AsResponse defaults if present
+                // Apply AsResource defaults if present
                 if ($resDto) {
                     $resolvedResponse = \Semitexa\Core\Discovery\AttributeDiscovery::getResolvedResponseAttributes(get_class($resDto));
                     if ($resolvedResponse) {
@@ -155,7 +160,7 @@ class Application
                     if (!method_exists($resDto, 'getRenderHandle') || !$resDto->getRenderHandle()) {
                         try {
                             $r = new \ReflectionClass($resDto);
-                            $attrs = $r->getAttributes('Semitexa\\Core\\Attributes\\AsResponse');
+                            $attrs = $r->getAttributes(\Semitexa\Core\Attributes\AsResource::class);
                             if (!empty($attrs)) {
                                 $a = $attrs[0]->newInstance();
                                 if (method_exists($resDto, 'setRenderHandle') && $a->handle) {
@@ -175,7 +180,7 @@ class Application
                             if (!method_exists($resDto, 'getRenderHandle') || !$resDto->getRenderHandle()) {
                                 $parent = $r->getParentClass();
                                 if ($parent) {
-                                    $parentAttrs = $parent->getAttributes('Semitexa\\Core\\Attributes\\AsResponse');
+                                    $parentAttrs = $parent->getAttributes(\Semitexa\Core\Attributes\AsResource::class);
                                     if (!empty($parentAttrs)) {
                                         $parentAttr = $parentAttrs[0]->newInstance();
                                         if (method_exists($resDto, 'setRenderHandle') && $parentAttr->handle) {

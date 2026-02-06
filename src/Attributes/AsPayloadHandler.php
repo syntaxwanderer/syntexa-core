@@ -8,12 +8,12 @@ use Attribute;
 use Semitexa\Core\Queue\HandlerExecution;
 
 /**
- * Marks a class as an HTTP request handler
- * 
+ * Marks a class as an HTTP payload (request) handler.
+ *
  * @see DocumentedAttributeInterface
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsRequestHandler implements DocumentedAttributeInterface
+class AsPayloadHandler implements DocumentedAttributeInterface
 {
     use DocumentedAttributeTrait;
 
@@ -32,6 +32,6 @@ class AsRequestHandler implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsRequestHandler.md';
+        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsPayloadHandler.md';
     }
 }

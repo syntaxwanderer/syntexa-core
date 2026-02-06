@@ -7,22 +7,22 @@ namespace Semitexa\Core\Attributes;
 use Attribute;
 
 /**
- * Marks a class as a request DTO with route information
- * 
+ * Marks a class as a payload (request) DTO with route information
+ *
  * This attribute tells Semitexa that this class should be treated as a request
- * and defines the route path, methods, and other options.
- * 
+ * payload and defines the route path, methods, and other options.
+ *
  * You can use environment variable references in any attribute value:
  * - `env::VAR_NAME` - reads from .env file, returns empty string if not set
  * - `env::VAR_NAME::default_value` - reads from .env file, returns default if not set (recommended)
  * - `env::VAR_NAME:default_value` - legacy format, also supported for backward compatibility
- * 
+ *
  * The double colon format (`::`) is recommended because it allows colons in default values.
- * 
+ *
  * Example:
  * ```php
- * #[AsRequest(
- *     doc: 'docs/attributes/AsRequest.md',
+ * #[AsPayload(
+ *     doc: 'docs/attributes/AsPayload.md',
  *     path: 'env::API_LOGIN_PATH::/api/login',
  *     methods: ['POST'],
  *     name: 'env::API_LOGIN_ROUTE_NAME::api.login',
@@ -31,7 +31,7 @@ use Attribute;
  * ```
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-class AsRequest implements DocumentedAttributeInterface
+class AsPayload implements DocumentedAttributeInterface
 {
     use DocumentedAttributeTrait;
 
@@ -40,6 +40,8 @@ class AsRequest implements DocumentedAttributeInterface
     public function __construct(
         ?string $doc = null,
         public ?string $base = null,
+        /** Class name of the Request this one overrides (strict chain: only current head can be overridden) */
+        public ?string $overrides = null,
         public ?string $responseWith = null,
         public ?string $path = null,
         public ?array $methods = null,
@@ -56,6 +58,6 @@ class AsRequest implements DocumentedAttributeInterface
 
     public function getDocPath(): string
     {
-        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsRequest.md';
+        return $this->doc ?? 'packages/semitexa/core/docs/attributes/AsPayload.md';
     }
 }
