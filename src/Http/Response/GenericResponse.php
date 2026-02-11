@@ -41,6 +41,7 @@ class GenericResponse implements ContractResponse
 
     // Render pipeline hints (optional)
     private ?string $renderHandle = null;
+    private ?string $layoutFrame = null;
     private array $renderContext = [];
     private ?\Semitexa\Core\Http\Response\ResponseFormat $renderFormat = null;
     private ?string $rendererClass = null;
@@ -54,6 +55,18 @@ class GenericResponse implements ContractResponse
     public function getRenderHandle(): ?string
     {
         return $this->renderHandle;
+    }
+
+    /** Optional layout frame (e.g. one-column, two-columns-left) for layout-level slots. */
+    public function setLayoutFrame(?string $layoutFrame): self
+    {
+        $this->layoutFrame = $layoutFrame;
+        return $this;
+    }
+
+    public function getLayoutFrame(): ?string
+    {
+        return $this->layoutFrame;
     }
 
     public function setRenderContext(array $context): self

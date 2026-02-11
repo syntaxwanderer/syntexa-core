@@ -230,6 +230,39 @@ class InitCommand extends Command
 
 > **Guiding principle:** Make it work → Make it right → Make it fast.
 
+## Foundational context (stack versions)
+
+Use these versions so you don't assume outdated syntax or APIs:
+
+- **PHP:** ^8.4 (see `composer.json` / `composer.lock`)
+- **semitexa/core:** dev-main or v1.x (path packages: `pakages/semitexa-core` or `vendor/semitexa/core`)
+- **semitexa/docs:** ^1.0 (AI_REFERENCE, guides)
+- **Key dependencies:** Symfony 7.x (console, process, etc.), Twig ^3.10, PHP-DI ^7.1
+
+Exact versions are in `composer.lock`. Do not assume Laravel, Illuminate, or Kernel-style middleware — Semitexa has its own module and route discovery.
+
+## Rules and guards
+
+- **Do not** add root-level directories or change module discovery without explicit user approval.
+- **Do not** add Composer dependencies without explicit user approval.
+- **Do not** create documentation files (README, guides, extra `.md` in the project) unless the user explicitly asks for them.
+- **Do not** create or use a `docs/` folder in the project root; use `var/docs/` for AI working files only.
+
+## Read before you change (mandatory)
+
+| Before you… | Read first |
+|-------------|------------|
+| Create or change **module structure** (folders, Application/…) | **vendor/semitexa/docs/AI_REFERENCE.md** → section **Module Structure** |
+| Change **service contracts** or DI bindings | **vendor/semitexa/core/docs/SERVICE_CONTRACTS.md**; run `bin/semitexa contracts:list --json` to see current bindings |
+| Add **new pages or routes** | **vendor/semitexa/core/docs/ADDING_ROUTES.md** |
+
+## Before you generate code (checklist)
+
+- **Modules:** only in `src/modules/`; standard layout: `Application/Payload/`, `Application/Resource/`, `Application/Handler/Request/`, `Application/View/templates/`.
+- **Routes:** only via modules (Request + Handler with attributes). Do not add routes in project `src/` (App\ is not discovered).
+- **Module autoload:** do not add per-module PSR-4 entries to project root `composer.json`; the framework autoloads from `src/modules/` at runtime.
+- **Contracts/DI:** before changing a contract or adding an override, run `bin/semitexa contracts:list` or `contracts:list --json` to see current implementations and active binding.
+
 ## Project structure (standalone app)
 
 - **bin/semitexa** – CLI
@@ -250,6 +283,16 @@ class InitCommand extends Command
 - **vendor/semitexa/core/docs/SERVICE_CONTRACTS.md** – service contracts, active implementation, and **contracts:list** command
 - **vendor/semitexa/docs/README.md** – package map; **vendor/semitexa/docs/guides/CONVENTIONS.md** – conventions (when semitexa/docs is installed)
 
+## Machine-readable commands (for AI agents and scripts)
+
+These commands produce **stable, parseable output** — use them instead of scraping human-oriented tables:
+
+| Command | Output | Use when |
+|---------|--------|----------|
+| `bin/semitexa contracts:list --json` | JSON: `contracts[]` with `contract`, `active`, `implementations` | Debugging DI, checking bindings before/after changing contracts or modules. See vendor/semitexa/core/docs/SERVICE_CONTRACTS.md. |
+
+(More commands may be added here with `--json` or similar; check `bin/semitexa list` and framework docs.)
+
 ## Debugging: service contracts (for AI agents and developers)
 
 To see **which interface is bound to which implementation** (and which implementation is active when several modules provide one):
@@ -264,8 +307,9 @@ Table: Contract (interface) | Implementations (module → class) | Active. Use w
 
 ## Quick start
 
-1. Read this file and vendor/semitexa/core/docs/ADDING_ROUTES.md
-2. Run (Docker):
+1. Read this file; follow **Read before you change** above when modifying modules, contracts, or routes.
+2. For new routes: read vendor/semitexa/core/docs/ADDING_ROUTES.md
+3. Run (Docker):
 
 ```bash
 cp .env.example .env
@@ -275,7 +319,7 @@ cp .env.example .env
 bin/semitexa server:start
 ```
 
-3. Default URL: http://0.0.0.0:{$port} (see .env SWOOLE_PORT). See vendor/semitexa/core/docs/RUNNING.md for details.
+4. Default URL: http://0.0.0.0:{$port} (see .env SWOOLE_PORT). See vendor/semitexa/core/docs/RUNNING.md for details.
 MD;
     }
 

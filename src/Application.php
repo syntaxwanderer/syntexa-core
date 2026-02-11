@@ -310,6 +310,10 @@ class Application
                             if (!isset($context['request']) && isset($reqDto)) {
                                 $context['request'] = $reqDto;
                             }
+                            // Layout frame (e.g. one-column) for layout-level slots
+                            if (method_exists($resDto, 'getLayoutFrame') && $resDto->getLayoutFrame() !== null) {
+                                $context['layout_frame'] = $resDto->getLayoutFrame();
+                            }
                             $html = $renderer::renderHandle($handle, $context);
                             if (method_exists($resDto, 'setContent')) {
                                 $resDto->setContent($html);
