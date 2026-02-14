@@ -113,6 +113,7 @@ class InitCommand extends Command
             '.gitignore' => $this->getGitignoreContent(),
             'public/.htaccess' => $this->getHtaccessContent(),
             'docker-compose.yml' => $this->getDockerComposeContent(),
+            'docker-compose.rabbitmq.yml' => $this->getDockerComposeRabbitMqContent(),
             'Dockerfile' => $this->getDockerfileContent(),
             'phpunit.xml.dist' => $this->getPhpunitXmlContent(),
         ];
@@ -184,6 +185,7 @@ class InitCommand extends Command
             '.env.example' => $this->getEnvExampleContent(),
             'Dockerfile' => $this->getDockerfileContent(),
             'docker-compose.yml' => $this->getDockerComposeContent(),
+            'docker-compose.rabbitmq.yml' => $this->getDockerComposeRabbitMqContent(),
             'phpunit.xml.dist' => $this->getPhpunitXmlContent(),
             'bin/semitexa' => $this->getBinSemitexaContent(),
             '.gitignore' => $this->getGitignoreContent(),
@@ -298,6 +300,18 @@ class InitCommand extends Command
         return $this->readTemplate('htaccess');
     }
 
+    private function getDockerComposeRabbitMqContent(): string
+    {
+        $dir = $this->getInitResourcesDir();
+        $path = $dir !== '' ? $dir . '/docker-compose.rabbitmq.yml' : '';
+        if ($path !== '' && is_readable($path)) {
+            return file_get_contents($path);
+        }
+        return "# Optional RabbitMQ overlay. When EVENTS_ASYNC=1, use: docker compose -f docker-compose.yml -f docker-compose.rabbitmq.yml up -d\n"
+            . "services:\n  app:\n    environment:\n      RABBITMQ_HOST: rabbitmq\n    depends_on:\n      rabbitmq:\n        condition: service_healthy\n"
+            . "  rabbitmq:\n    image: rabbitmq:3-alpine\n    restart: unless-stopped\n    healthcheck:\n      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]\n      interval: 30s\n      timeout: 10s\n      retries: 5\n      start_period: 30s\n";
+    }
+
     private function getDockerComposeContent(): string
     {
         $dir = $this->getInitResourcesDir();
@@ -306,15 +320,11 @@ class InitCommand extends Command
             $port = self::DEFAULT_SWOOLE_PORT;
             return "# Minimal Semitexa app: PHP + Swoole in Docker.\n"
                 . "# Start: bin/semitexa server:start | Stop: bin/semitexa server:stop\n"
-                . "# When EVENTS_ASYNC=1, RabbitMQ is started and the app connects to the rabbitmq service.\n"
-                . "services:\n  app:\n    build: .\n    env_file: .env\n    environment:\n      RABBITMQ_HOST: rabbitmq\n"
+                . "# When EVENTS_ASYNC=1, use docker-compose.rabbitmq.yml (server:start does this automatically).\n"
+                . "services:\n  app:\n    build: .\n    env_file: .env\n"
                 . "    volumes:\n      - .:/var/www/html\n    ports:\n"
                 . "      - \"\${SWOOLE_PORT:-{$port}}:\${SWOOLE_PORT:-{$port}}\"\n"
-                . "    restart: unless-stopped\n    command: [\"php\", \"server.php\"]\n"
-                . "    depends_on:\n      rabbitmq:\n        condition: service_healthy\n"
-                . "  rabbitmq:\n    image: rabbitmq:3-alpine\n    restart: unless-stopped\n"
-                . "    healthcheck:\n      test: [\"CMD\", \"rabbitmq-diagnostics\", \"-q\", \"ping\"]\n"
-                . "      interval: 3s\n      timeout: 5s\n      retries: 5\n      start_period: 10s\n";
+                . "    restart: unless-stopped\n    command: [\"php\", \"server.php\"]\n";
         }
         $content = file_get_contents($templatePath);
         return str_replace(self::PLACEHOLDER_PORT, (string) self::DEFAULT_SWOOLE_PORT, $content);

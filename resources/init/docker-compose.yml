@@ -1,29 +1,15 @@
 # Minimal Semitexa app: PHP + Swoole in Docker.
 # Start: bin/semitexa server:start | Stop: bin/semitexa server:stop
-# Container names are auto-generated per project so multiple projects can run on the same host.
-# When EVENTS_ASYNC=1, RabbitMQ is started and the app connects to the rabbitmq service.
+# Optional: when EVENTS_ASYNC=1, use docker-compose.rabbitmq.yml to add RabbitMQ:
+#   docker compose -f docker-compose.yml -f docker-compose.rabbitmq.yml up -d
+# (server:start does this automatically when EVENTS_ASYNC=1 is set in .env)
 services:
   app:
     build: .
     env_file: .env
-    environment:
-      RABBITMQ_HOST: rabbitmq
     volumes:
       - .:/var/www/html
     ports:
       - "${SWOOLE_PORT:-{{ default_swoole_port }}}:${SWOOLE_PORT:-{{ default_swoole_port }}}"
     restart: unless-stopped
     command: ["php", "server.php"]
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
-  rabbitmq:
-    image: rabbitmq:3-alpine
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 3s
-      timeout: 5s
-      retries: 5
-      start_period: 10s

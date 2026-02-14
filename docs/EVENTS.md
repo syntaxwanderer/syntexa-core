@@ -8,7 +8,7 @@ In Semitexa, **events** are the single mechanism for deferred or asynchronous wo
 - **EVENTS_TRANSPORT**: Override transport: `in-memory` or `rabbitmq`.
 - **EVENTS_QUEUE_DEFAULT**: Default queue name pattern when not set per handler.
 
-When **EVENTS_ASYNC=1**, the app uses RabbitMQ. If you run with Docker (`docker compose up`), RabbitMQ is started automatically and the app connects to the `rabbitmq` service.
+When **EVENTS_ASYNC=1**, the app uses RabbitMQ. If you run with Docker, `bin/semitexa server:start` automatically uses `docker-compose.rabbitmq.yml` (so RabbitMQ is started and the app connects to the `rabbitmq` service). Without EVENTS_ASYNC=1, only the app container runs and RabbitMQ is not started.
 
 ## Sync vs async per handler (event)
 
@@ -38,5 +38,5 @@ Optional arguments: transport name and queue name (defaults come from `QueueConf
 ## Summary
 
 - **Events** = single mechanism; implemented as queues (sync in-memory or async RabbitMQ).
-- **EVENTS_ASYNC=1** → use RabbitMQ; in Docker, RabbitMQ is started with the stack.
+- **EVENTS_ASYNC=1** → use RabbitMQ; in Docker, `server:start` adds the RabbitMQ overlay (`docker-compose.rabbitmq.yml`) so RabbitMQ is started only when needed.
 - **Per handler:** `execution: sync | async` in `AsPayloadHandler`.

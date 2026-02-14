@@ -37,9 +37,15 @@ class ServerStartCommand extends BaseCommand
             return Command::FAILURE;
         }
 
+        $useRabbitMq = $this->shouldUseRabbitMqCompose($projectRoot);
+        $composeArgs = $this->getComposeBaseArgs($projectRoot, $useRabbitMq);
+
         $io->section('Starting containers...');
-        
-        $process = new Process(['docker', 'compose', 'up', '-d'], $projectRoot);
+        if ($useRabbitMq) {
+            $io->text('Using docker-compose.yml + docker-compose.rabbitmq.yml (EVENTS_ASYNC=1).');
+        }
+
+        $process = new Process(array_merge(['docker', 'compose'], $composeArgs, ['up', '-d']), $projectRoot);
         $process->setTimeout(null);
         
         $process->run(function ($type, $buffer) use ($io) {
@@ -68,23 +74,52 @@ class ServerStartCommand extends BaseCommand
         $io->text('To view logs: docker compose logs -f');
         $io->text('To stop: bin/semitexa server:stop (or docker compose down)');
 
-        $this->reportRabbitMqStatus($io, $projectRoot, $eventsAsync);
+        $this->reportRabbitMqStatus($io, $projectRoot, $eventsAsync, $useRabbitMq);
 
         return Command::SUCCESS;
     }
 
-    private function reportRabbitMqStatus(SymfonyStyle $io, string $projectRoot, string $eventsAsync): void
+    private function shouldUseRabbitMqCompose(string $projectRoot): bool
+    {
+        $rabbitMqCompose = $projectRoot . '/docker-compose.rabbitmq.yml';
+        if (!file_exists($rabbitMqCompose)) {
+            return false;
+        }
+        $envFile = $projectRoot . '/.env';
+        if (!file_exists($envFile)) {
+            return false;
+        }
+        $content = file_get_contents($envFile);
+        return (bool) preg_match('/^\s*EVENTS_ASYNC\s*=\s*(1|true|yes)\s*$/mi', $content);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getComposeBaseArgs(string $projectRoot, bool $useRabbitMq): array
+    {
+        if ($useRabbitMq && file_exists($projectRoot . '/docker-compose.rabbitmq.yml')) {
+            return ['-f', 'docker-compose.yml', '-f', 'docker-compose.rabbitmq.yml'];
+        }
+        return [];
+    }
+
+    private function reportRabbitMqStatus(SymfonyStyle $io, string $projectRoot, string $eventsAsync, bool $useRabbitMqCompose): void
     {
         $enabled = in_array(strtolower(trim($eventsAsync)), ['1', 'true', 'yes'], true);
-        if (!$enabled) {
+        if (!$enabled || !$useRabbitMqCompose) {
             return;
         }
 
-        $cmd = [
-            'docker', 'compose', 'exec', '-T', 'app',
+        $composeArgs = $this->getComposeBaseArgs($projectRoot, true);
+        $cmd = array_merge(
+            ['docker', 'compose'],
+            $composeArgs,
+            ['exec', '-T', 'app',
             'php', '-r',
             '$h = getenv("RABBITMQ_HOST") ?: "127.0.0.1"; $p = (int)(getenv("RABBITMQ_PORT") ?: "5672"); $s = @fsockopen($h, $p, $err, $errstr, 3); if ($s) { fclose($s); exit(0); } exit(1);',
-        ];
+            ]
+        );
         $maxAttempts = 3;
         $delaySeconds = 2;
         $reachable = false;
