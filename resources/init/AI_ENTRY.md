@@ -24,7 +24,8 @@ Exact versions are in `composer.lock`. Do not assume Laravel, Illuminate, or Ker
 
 | Before you… | Read first |
 |-------------|------------|
-| Create or change **module structure** (folders, Application/…) | **vendor/semitexa/docs/AI_REFERENCE.md** → section **Module Structure** |
+| Understand **why** Semitexa (philosophy, goals, pain) | **vendor/semitexa/docs/README.md** (vision) and **AI_REFERENCE.md** (for agents). Monorepo: **pakages/semitexa-docs/** |
+| Create or change **module structure** (folders, Application/…) | **docs/MODULE_STRUCTURE.md** and **vendor/semitexa/core/docs/ADDING_ROUTES.md** |
 | Change **service contracts** or DI bindings | **vendor/semitexa/core/docs/SERVICE_CONTRACTS.md**; run `bin/semitexa contracts:list --json` to see current bindings |
 | Add **new pages or routes** | **vendor/semitexa/core/docs/ADDING_ROUTES.md** |
 
@@ -49,7 +50,7 @@ Exact versions are in `composer.lock`. Do not assume Laravel, Illuminate, or Ker
 
 ## Framework docs (in vendor — read these, do not copy into project)
 
-- **vendor/semitexa/docs/AI_REFERENCE.md** – main reference for AI; **before creating or changing module structure** read it → section **Module Structure** (Standard Module Layout).
+- **vendor/semitexa/docs/README.md** and **AI_REFERENCE.md** – philosophy and goals; read first so changes align with project intent.
 - **vendor/semitexa/core/docs/ADDING_ROUTES.md** – how to add new pages/routes (modules only)
 - **vendor/semitexa/core/docs/RUNNING.md** – how to run the app (Docker)
 - **vendor/semitexa/core/docs/attributes/** – Request, Handler, Response attributes

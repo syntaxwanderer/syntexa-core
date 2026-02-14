@@ -27,5 +27,6 @@ composer require semitexa/core
 | Running the app (Docker) | [docs/RUNNING.md](docs/RUNNING.md) |
 | Sessions and cookies | [docs/SESSIONS_AND_COOKIES.md](docs/SESSIONS_AND_COOKIES.md) |
 | Attributes (AsRequest, AsRequestHandler, etc.) | [docs/attributes/README.md](docs/attributes/README.md) |
+| Project scaffold templates (AI_ENTRY, docs/AI_CONTEXT, etc.) | [docs/scaffold/README.md](docs/scaffold/README.md) |
 
 For the full framework guide and package map, see the **semitexa/docs** package (e.g. `vendor/semitexa/docs/README.md` when installed).

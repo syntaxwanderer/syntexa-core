@@ -12,7 +12,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 /**
  * Scaffolds Semitexa project structure: bin/, public/, src/, var/, .env.example, server.php, bin/semitexa,
- * docker-compose.yml, Dockerfile, AI_ENTRY.md, README.md, var/docs (AI working dir only), phpunit.xml.dist, autoload in composer.json.
+ * docker-compose.yml, Dockerfile, AI_ENTRY.md, docs/AI_CONTEXT.md, README.md, var/docs (AI working dir only), phpunit.xml.dist, autoload in composer.json.
  * Framework docs (CONVENTIONS, RUNNING, ADDING_ROUTES) live in vendor/semitexa/core/docs/ — not written into project.
  */
 class InitCommand extends Command
@@ -105,6 +105,7 @@ class InitCommand extends Command
 
         $files = [
             'AI_ENTRY.md' => $this->getAiEntryContent(),
+            'docs/AI_CONTEXT.md' => $this->getAiContextContent(),
             'README.md' => $this->getReadmeContent(),
             '.env.example' => $this->getEnvExampleContent(),
             'server.php' => $this->getServerPhpContent(),
@@ -168,7 +169,7 @@ class InitCommand extends Command
 
     /**
      * Sync docs and scaffold from framework template (for existing projects after composer update).
-     * Updates: AI_ENTRY, README, server.php, .env.example, Dockerfile, docker-compose.yml, phpunit.xml.dist, bin/semitexa, .gitignore.
+     * Updates: AI_ENTRY, docs/AI_CONTEXT, README, server.php, .env.example, Dockerfile, docker-compose.yml, phpunit.xml.dist, bin/semitexa, .gitignore.
      */
     private function executeOnlyDocs(string $root, SymfonyStyle $io, bool $force): int
     {
@@ -177,6 +178,7 @@ class InitCommand extends Command
 
         $syncFiles = [
             'AI_ENTRY.md' => $this->getAiEntryContent(),
+            'docs/AI_CONTEXT.md' => $this->getAiContextContent(),
             'README.md' => $this->getReadmeContent(),
             'server.php' => $this->getServerPhpContent(),
             '.env.example' => $this->getEnvExampleContent(),
@@ -216,7 +218,7 @@ class InitCommand extends Command
             $io->note('Skipped (exists): ' . $f . ' (use --force to overwrite)');
         }
 
-        $io->success('Docs and scaffold (AI_ENTRY, README, server.php, .env.example, Dockerfile, docker-compose, phpunit, bin/semitexa, .gitignore) synced from framework.');
+        $io->success('Docs and scaffold (AI_ENTRY, docs/AI_CONTEXT, README, server.php, .env.example, Dockerfile, docker-compose, phpunit, bin/semitexa, .gitignore) synced from framework.');
         $io->text('.env is never touched. Copy new vars from .env.example to .env if needed.');
         return Command::SUCCESS;
     }
@@ -254,6 +256,11 @@ class InitCommand extends Command
     private function getAiEntryContent(): string
     {
         return $this->readTemplate('AI_ENTRY.md');
+    }
+
+    private function getAiContextContent(): string
+    {
+        return $this->readTemplate('docs/AI_CONTEXT.md');
     }
 
     private function getReadmeContent(): string
