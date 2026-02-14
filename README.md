@@ -1,5 +1,7 @@
 # Semitexa Core
 
+> **Philosophy & ideology** — [Why Semitexa: vision and principles](../semitexa-docs/README.md). The detailed, technical documentation for this package is below.
+
 Core framework functionality for Semitexa: request/response handling, attributes, discovery, CLI, and Swoole integration.
 
 ## Installation

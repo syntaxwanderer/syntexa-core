@@ -8,7 +8,7 @@ This document describes how sessions and cookies work in Semitexa: lifecycle, st
 
 - **Session**: server-side session storage (Swoole Table), identified by a 32-character cookie. Data is read at request start and saved at request end.
 - **Cookies**: read from the incoming request; new cookies are queued in a **CookieJar** and sent in the response as `Set-Cookie` headers.
-- **Request-scoping**: each request gets its own `Session`, `CookieJar`, and `Request`. Handlers receive the **same** `CookieJar` instance that the framework uses to send cookies, so any cookie set in a handler is included in the response.
+- **Request-scoping**: each request gets its own `Session`, `CookieJar`, and `Request`. Handlers receive the **same** `CookieJar` instance that the framework uses to send cookies, so any cookie set in a handler is included in the response. **Why:** so that cookies set in a handler are actually sent to the browser without mixing state between requests or losing them due to a different jar instance.
 
 ---
 

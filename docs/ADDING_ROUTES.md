@@ -3,6 +3,8 @@
 **New routes (pages, endpoints) in Semitexa are added only via modules.**  
 Request/Handler classes in the project folder `src/` (namespace `App\`) are **not discovered** by the framework — do not add them there for routes. Put all new pages and endpoints in **modules** (`src/modules/`, `packages/`, or installed packages in `vendor/`).
 
+**Why modules only:** So that routes and handlers are discoverable in one place (module layout + attributes), and there is no confusion between "app" code and framework: everything that defines a route lives in a module with a clear namespace and structure. This keeps the codebase predictable for both humans and tools.
+
 ---
 
 ## Step-by-step: create a new module and add a route
