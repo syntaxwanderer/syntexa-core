@@ -4,17 +4,18 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Event;
 
-use Semitexa\Core\Event\EventExecution;
+use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Queue\QueueConfig;
 use Semitexa\Core\Queue\QueueTransportRegistry;
 use Semitexa\Core\Support\DtoSerializer;
-use Semitexa\Core\Container\ContainerFactory;
 
 /**
  * Single entry point for events: create() builds the event instance (framework-controlled),
  * dispatch() runs all listeners (sync or async via the same queue as payload handlers).
  */
-final class EventDispatcher
+#[AsServiceContract(of: EventDispatcherInterface::class)]
+final class EventDispatcher implements EventDispatcherInterface
 {
     /**
      * Create an event instance. Use this instead of "new Event()" so the framework

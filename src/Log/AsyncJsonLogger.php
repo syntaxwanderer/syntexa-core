@@ -4,27 +4,36 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Log;
 
+use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Environment;
 
 /**
  * Logger that writes JSON lines to a file. Under Swoole, writes are deferred so the request is not blocked.
+ * Environment is injected by the container (InjectAsReadonly); config is resolved lazily on first use.
  */
+#[AsServiceContract(of: LoggerInterface::class)]
 final class AsyncJsonLogger implements LoggerInterface
 {
     private const DEFAULT_LOG_FILE = 'var/log/app.log';
 
-    private int $minLevel;
-    private string $logFile;
+    #[InjectAsReadonly]
+    protected Environment $environment;
+
+    private ?int $minLevel = null;
+    private ?string $logFile = null;
     /** @var list<array{level: string, message: string, context: array, timestamp: string}> */
     private array $buffer = [];
     private bool $deferScheduled = false;
 
-    public function __construct(?Environment $environment = null)
+    private function ensureConfig(): void
     {
-        $env = $environment ?? Environment::create();
+        if ($this->minLevel !== null) {
+            return;
+        }
         $levelName = Environment::getEnvValue('LOG_LEVEL');
         if ($levelName === null || $levelName === '' || !LogLevel::isValid($levelName)) {
-            $levelName = $env->isDev() ? 'info' : 'warning';
+            $levelName = $this->environment->isDev() ? 'info' : 'warning';
         }
         $this->minLevel = LogLevel::toValue($levelName);
         $logFile = Environment::getEnvValue('LOG_FILE');
@@ -63,6 +72,7 @@ final class AsyncJsonLogger implements LoggerInterface
 
     private function log(string $level, string $message, array $context): void
     {
+        $this->ensureConfig();
         if (LogLevel::toValue($level) < $this->minLevel) {
             return;
         }
@@ -101,11 +111,12 @@ final class AsyncJsonLogger implements LoggerInterface
         if ($this->buffer === []) {
             return;
         }
+        $this->ensureConfig();
         $entries = $this->buffer;
         $this->buffer = [];
 
         $root = $this->resolveProjectRoot();
-        $path = $root . '/' . ltrim($this->logFile, '/');
+        $path = $root . '/' . ltrim($this->logFile ?? self::DEFAULT_LOG_FILE, '/');
         $dir = dirname($path);
         if (!is_dir($dir)) {
             @mkdir($dir, 0755, true);

@@ -37,9 +37,9 @@ Detailed, technical documentation stays in each package (e.g. vendor/semitexa/co
 4.  **Response**: Return `Response::json(...)` or a Twig-based Response DTO. After adding/changing payloads run **`bin/semitexa registry:sync:payloads`**.
 
 ### Adding a Service
-1.  Define Interface: `Domain/Contract/MyServiceInterface.php` with `#[AsServiceContract]`.
-2.  Implement: `Infrastructure/Service/MyService.php` implementing the interface.
-3.  Inject: Use standard constructor injection.
+1.  Define Interface: `Domain/Contract/MyServiceInterface.php` (no attribute on the interface).
+2.  Implement: `Infrastructure/Service/MyService.php` with `#[AsServiceContract(of: MyServiceInterface::class)]` implementing the interface.
+3.  Inject: In consumers use **property injection** — `#[InjectAsReadonly]`, `#[InjectAsMutable]`, or `#[InjectAsFactory]` on protected properties. No constructor injection. See **vendor/semitexa/core/docs/SERVICE_CONTRACTS.md** and **vendor/semitexa/core/src/Container/README.md**.
 
 ## 🔍 Discovery
 - **Routes**: Built from `src/registry/Payloads/` (generated); module request DTOs live in `Application/Payload/Request/`. Session/Event DTOs in `Payload/Session/`, `Payload/Event/`. See **docs/MODULE_STRUCTURE.md**.

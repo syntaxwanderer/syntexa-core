@@ -139,11 +139,11 @@ Methods: `get`, `has`, `set`, `remove`, `getSetCookieLines()`.
 
 Session, CookieJar, and Request are **per-request** and must be the same instances for the whole pipeline:
 
-1. **Application** (`initSessionAndCookies`): creates `Session` and `CookieJar($request)`, puts them (and `Request`) into `RequestScopedContainer` via `set()`.
-2. **Handlers**: when the container creates a handler (or any request-scoped service), it uses **constructor parameter overrides** for `SessionInterface`, `CookieJarInterface`, and `Request`: `RequestScopedContainer::getRequestScopedConstructorOverrides()` reads the constructor by reflection and injects the instances from the request-scoped cache. So the handler’s `CookieJar` is exactly the one that `finalizeSessionAndCookies` later uses — cookies set in the handler are included in the response.
+1. **Application** (`initSessionAndCookies`): creates `Session` and `CookieJar($request)`, puts them (and `Request`) into `RequestScopedContainer` via `set()`. When all three are set, the container’s **RequestContext** is updated so that mutable services receive them.
+2. **Handlers**: handlers are **mutable** services. When the container is asked for a handler, it returns a **clone** of the handler prototype and then injects the current **RequestContext** (Request, SessionInterface, CookieJarInterface) into that clone’s matching **protected** properties. So the handler uses the same Session/CookieJar/Request that `finalizeSessionAndCookies` later uses — cookies set in the handler are included in the response. Handlers do **not** use constructor injection for these; they declare e.g. `protected SessionInterface $session;` (no attribute); the container fills them from RequestContext.
 3. **After each request**: `RequestScopedContainer::reset()` is called (e.g. in `server.php` `finally`), clearing the cache so the next request gets new Session/CookieJar/Request.
 
-DI bindings for `SessionInterface`, `CookieJarInterface`, and `Request` in the global container use factories that delegate to `getRequestScoped()->get(...)`. The override mechanism ensures that even when the global container is used to construct handlers, they still receive the request-scoped instances.
+See **src/Container/README.md** for the full DI and RequestContext behaviour.
 
 ---
 
@@ -175,7 +175,7 @@ So: CookieJar → `getSetCookieLines()` → response headers → server → `raw
 | Cookie jar interface | `src/Cookie/CookieJarInterface.php` |
 | Cookie jar implementation | `src/Cookie/CookieJar.php` |
 | Init/finalize session and cookies | `src/Application.php` (`initSessionAndCookies`, `finalizeSessionAndCookies`) |
-| Request-scoped overrides | `src/Container/RequestScopedContainer.php` (`getRequestScopedConstructorOverrides`) |
+| RequestContext / request-scoped values | `src/Container/RequestScopedContainer.php`, `src/Container/RequestContext.php` |
 | Request cookies (parsing) | `src/RequestFactory.php` (Cookie header + Swoole cookie merge) |
 | Sending Set-Cookie in Swoole | `server.php` (`parseSetCookieLineAndSend`, request callback) |
 | Session table setup | `server.php` (Table create + `SwooleSessionTableHolder::setTable`) |

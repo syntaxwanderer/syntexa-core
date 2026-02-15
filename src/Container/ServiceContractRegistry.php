@@ -81,7 +81,11 @@ final class ServiceContractRegistry
                 }
                 $moduleName = ModuleRegistry::getModuleNameForClass($implClass);
                 if ($moduleName === null) {
-                    continue;
+                    // Classes from Semitexa\Core (e.g. AsyncJsonLogger) are treated as module "Core"
+                    if (!str_starts_with(ltrim($implClass, '\\'), 'Semitexa\\Core\\')) {
+                        continue;
+                    }
+                    $moduleName = 'Core';
                 }
                 $byInterface[$interface][] = ['module' => $moduleName, 'impl' => $implClass];
             } catch (\Throwable $e) {

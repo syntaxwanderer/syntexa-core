@@ -1,26 +1,26 @@
-# AsRequestHandler Attribute
+# Request handlers (AsPayloadHandler + HandlerInterface)
 
 ## Description
 
-The `#[AsRequestHandler]` attribute marks a class as an HTTP Handler for a specific Request.  
-Such handlers are automatically discovered by the framework and invoked to process the corresponding Request.
+Request handlers are classes that process a specific Request (Payload). They are marked with **#[AsPayloadHandler(payload: ..., resource: ...)]** and **#[AsServiceContract(of: HandlerInterface::class)]**, and must **implement HandlerInterface**. The framework discovers them in **modules** and invokes them to handle the corresponding route.
 
 **Placement:** Handler classes must live in **modules** (`src/modules/`, `packages/`, or `vendor/`).  
 Classes in project `src/` (namespace `App\`) are **not discovered** for routes — do not put new routes there. See [ADDING_ROUTES.md](../ADDING_ROUTES.md).
 
+**DI:** Handlers are **mutable** services. Dependencies are injected via **protected** properties with **#[InjectAsReadonly]**, **#[InjectAsMutable]**, or **#[InjectAsFactory]** — not constructor injection. Session, CookieJar, and Request are filled from **RequestContext** on the handler clone. See [Container README](../src/Container/README.md).
+
 ## Usage
 
 ```php
-use Semitexa\Core\Attributes\AsRequestHandler;
-use Semitexa\Core\Handler\HttpHandlerInterface;
+use Semitexa\Core\Attributes\AsPayloadHandler;
+use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Contract\HandlerInterface;
 use Semitexa\Core\Contract\RequestInterface;
 use Semitexa\Core\Contract\ResponseInterface;
 
-#[AsRequestHandler(
-    doc: 'docs/attributes/AsRequestHandler.md',
-    for: UserListRequest::class
-)]
-class UserListHandler implements HttpHandlerInterface
+#[AsServiceContract(of: HandlerInterface::class)]
+#[AsPayloadHandler(payload: UserListRequest::class, resource: UserListResource::class)]
+class UserListHandler implements HandlerInterface
 {
     public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -30,12 +30,12 @@ class UserListHandler implements HttpHandlerInterface
 }
 ```
 
-## Parameters
+## AsPayloadHandler parameters
 
 ### Required
 
-- `doc` (string) - Path to the documentation file (relative to project root).
-- `for` (string) - Request class that this handler processes.
+- `payload` (string) - Request/Payload class that this handler processes.
+- `resource` (string|null) - Resource class for the response (can be null for JSON-only handlers).
 
 ### Optional
 
@@ -53,22 +53,22 @@ class UserListHandler implements HttpHandlerInterface
 Synchronous handlers are executed immediately during request processing:
 
 ```php
-#[AsRequestHandler(
-    doc: 'docs/attributes/AsRequestHandler.md',
-    for: DashboardRequest::class,
-    execution: 'sync'  // or HandlerExecution::Sync
-)]
-class DashboardHandler implements HttpHandlerInterface
+use Semitexa\Core\Attributes\AsPayloadHandler;
+use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Attributes\InjectAsReadonly;
+use Semitexa\Core\Contract\HandlerInterface;
+
+#[AsServiceContract(of: HandlerInterface::class)]
+#[AsPayloadHandler(payload: DashboardRequest::class, resource: DashboardResource::class, execution: 'sync')]
+class DashboardHandler implements HandlerInterface
 {
-    public function __construct(
-        #[Inject] private UserRepository $userRepository
-    ) {}
+    #[InjectAsReadonly]
+    protected UserRepository $userRepository;
 
     public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         /** @var DashboardRequest $request */
         $user = $this->userRepository->findCurrentUser();
-        
         $response->setContext(['user' => $user]);
         return $response;
     }
@@ -80,18 +80,26 @@ class DashboardHandler implements HttpHandlerInterface
 Asynchronous handlers are executed via a queue:
 
 ```php
+use Semitexa\Core\Attributes\AsPayloadHandler;
+use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Attributes\InjectAsReadonly;
+use Semitexa\Core\Contract\HandlerInterface;
 use Semitexa\Core\Queue\HandlerExecution;
 
-#[AsRequestHandler(
-    doc: 'docs/attributes/AsRequestHandler.md',
-    for: EmailSendRequest::class,
+#[AsServiceContract(of: HandlerInterface::class)]
+#[AsPayloadHandler(
+    payload: EmailSendRequest::class,
+    resource: null,
     execution: HandlerExecution::Async,
     transport: 'rabbitmq',
     queue: 'emails',
     priority: 10
 )]
-class EmailSendHandler implements HttpHandlerInterface
+class EmailSendHandler implements HandlerInterface
 {
+    #[InjectAsReadonly]
+    protected EmailServiceInterface $emailService;
+
     public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         // This code will run asynchronously in a worker process
@@ -106,48 +114,39 @@ class EmailSendHandler implements HttpHandlerInterface
 If there are multiple handlers for the same Request, they are executed in priority order:
 
 ```php
-// Executed first (priority: 10)
-#[AsRequestHandler(
-    doc: 'docs/attributes/AsRequestHandler.md',
-    for: UserRequest::class,
-    priority: 10
-)]
-class UserValidationHandler implements HttpHandlerInterface {}
+#[AsServiceContract(of: HandlerInterface::class)]
+#[AsPayloadHandler(payload: UserRequest::class, resource: null, priority: 10)]
+class UserValidationHandler implements HandlerInterface { ... }
 
-// Executed second (priority: 5)
-#[AsRequestHandler(
-    doc: 'docs/attributes/AsRequestHandler.md',
-    for: UserRequest::class,
-    priority: 5
-)]
-class UserLoggingHandler implements HttpHandlerInterface {}
+#[AsServiceContract(of: HandlerInterface::class)]
+#[AsPayloadHandler(payload: UserRequest::class, resource: null, priority: 5)]
+class UserLoggingHandler implements HandlerInterface { ... }
 
-// Executed last (priority: 0, default)
-#[AsRequestHandler(
-    doc: 'docs/attributes/AsRequestHandler.md',
-    for: UserRequest::class
-)]
-class UserProcessingHandler implements HttpHandlerInterface {}
+#[AsServiceContract(of: HandlerInterface::class)]
+#[AsPayloadHandler(payload: UserRequest::class, resource: UserResource::class)]
+class UserProcessingHandler implements HandlerInterface { ... }
 ```
 
 ## Dependency Injection
 
-Handlers support automatic dependency injection via PHP-DI:
+Handlers get dependencies via **property injection** only (no constructor injection). Use **#[InjectAsReadonly]** for shared services, **#[InjectAsMutable]** for request-scoped clones, **#[InjectAsFactory]** for a factory of a contract. Session, CookieJar, and Request are **not** in the DI graph; the container sets them on the handler clone from **RequestContext** (see [Container README](../src/Container/README.md) and [SESSIONS_AND_COOKIES.md](../SESSIONS_AND_COOKIES.md)).
 
 ```php
-use DI\Attribute\Inject;
+use Semitexa\Core\Attributes\AsPayloadHandler;
+use Semitexa\Core\Attributes\AsServiceContract;
+use Semitexa\Core\Attributes\InjectAsReadonly;
+use Semitexa\Core\Contract\HandlerInterface;
 
-#[AsRequestHandler(
-    doc: 'docs/attributes/AsRequestHandler.md',
-    for: UserListRequest::class
-)]
-class UserListHandler implements HttpHandlerInterface
+#[AsServiceContract(of: HandlerInterface::class)]
+#[AsPayloadHandler(payload: UserListRequest::class, resource: UserListResource::class)]
+class UserListHandler implements HandlerInterface
 {
-    public function __construct(
-        #[Inject] private UserRepository $userRepository,
-        #[Inject] private AuthService $authService,
-        #[Inject] private LoggerInterface $logger
-    ) {}
+    #[InjectAsReadonly]
+    protected UserRepository $userRepository;
+    #[InjectAsReadonly]
+    protected AuthService $authService;
+    #[InjectAsReadonly]
+    protected LoggerInterface $logger;
 
     public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -161,19 +160,21 @@ class UserListHandler implements HttpHandlerInterface
 
 ## Requirements
 
-1. Class MUST implement `HttpHandlerInterface`.
-2. `handle()` MUST accept `RequestInterface` and `ResponseInterface` and return a `ResponseInterface`.
-3. The `for` parameter MUST point to a class annotated with `#[AsRequest]`.
-4. For async handlers the `transport` parameter is required.
-5. The `doc` parameter is required and MUST point to an existing documentation file.
+1. Class MUST implement **HandlerInterface** and be marked with **#[AsServiceContract(of: HandlerInterface::class)]**.
+2. Class MUST be marked with **#[AsPayloadHandler(payload: ..., resource: ...)]** so the route is registered.
+3. `handle()` MUST accept `RequestInterface` and `ResponseInterface` and return `ResponseInterface`.
+4. The `payload` parameter MUST point to a Request/Payload class (e.g. with `#[AsPayload]`).
+5. For async handlers the `transport` parameter is required.
 
 ## Related attributes
 
-- `#[AsRequest]` - Request DTO processed by the handler.
-- `#[AsResponse]` - Response DTO returned by the handler.
+- `#[AsPayload]` - Request/Payload DTO processed by the handler.
+- `#[AsResource]` - Resource used to build the response.
+- [Container README](../../src/Container/README.md) - DI rules, InjectAsReadonly/Mutable/Factory, RequestContext.
 
 ## See also
 
-- [AsRequest](AsRequest.md) - Creating Request DTOs.
-- [AsResponse](AsResponse.md) - Creating Response DTOs.
+- [AsRequest](AsRequest.md) - Request DTOs.
+- [AsResponse](AsResponse.md) - Response DTOs.
+- [SERVICE_CONTRACTS.md](../SERVICE_CONTRACTS.md) - Service contracts and active implementation.
 - Queue system: `packages/semitexa/core/src/Queue/README.md` (if available).

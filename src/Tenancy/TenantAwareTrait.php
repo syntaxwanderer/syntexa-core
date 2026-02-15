@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Semitexa\Core\Tenancy;
 
+use Psr\Container\ContainerInterface;
 use Semitexa\Core\Container\RequestScopedContainer;
-use DI\Container;
 
 /**
  * Trait for services that need tenant context
@@ -23,7 +23,7 @@ trait TenantAwareTrait
     protected function getTenantContext(): TenantContext
     {
         // Try to get from container if available
-        if (property_exists($this, 'container') && $this->container instanceof Container) {
+        if (property_exists($this, 'container') && $this->container instanceof ContainerInterface) {
             $requestScoped = \Semitexa\Core\Container\ContainerFactory::getRequestScoped();
             $context = $requestScoped->getTenantContext();
             

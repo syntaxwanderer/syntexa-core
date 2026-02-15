@@ -1,82 +1,86 @@
 # Semitexa DI Container
 
-Semitexa uses PHP-DI for dependency injection, configured for Swoole long-running processes.
+Semitexa uses a **custom DI container** (no PHP-DI). It is built once per worker and follows the design in `var/docs/DESIGN_DI_CONTAINER.md`: only one way to register services and one way to inject.
 
-## Key Features
+## Who gets into the container
 
-- **Swoole-safe**: Container is reset after each request to prevent memory leaks
-- **Autowiring**: Automatic dependency resolution
-- **Module support**: Modules can register services via `ServiceProviderInterface`
+Only types registered via **#[AsServiceContract(of: SomeInterface::class)]** on implementation classes. The container discovers them through `ServiceContractRegistry` (same as `bin/semitexa contracts:list`). There is no separate “register anything” attribute: if a class is not an implementation of a contract with `AsServiceContract`, it is not in the container unless set manually for bootstrap (e.g. `Environment`).
 
-## Usage
+- **Handlers:** implement `HandlerInterface` and use `#[AsServiceContract(of: HandlerInterface::class)]`.
+- **Event listeners:** implement `EventListenerInterface` and use `#[AsServiceContract(of: EventListenerInterface::class)]`.
+- **Other services:** define an interface and put `#[AsServiceContract(of: ThatInterface::class)]` on the implementation(s). Classes in `Semitexa\Core\` are treated as module `Core`.
 
-### Basic Usage
+Bootstrap entries (e.g. `Environment`) are registered in `ContainerFactory::registerBootstrapEntries()` with `$container->set()` before `build()`.
+
+## How to inject (no constructor injection)
+
+Dependencies are injected **only via protected properties** with exactly one of these attributes:
+
+| Attribute            | Meaning |
+|----------------------|--------|
+| **#[InjectAsReadonly]** | Shared instance per worker (same for all requests). |
+| **#[InjectAsMutable]**  | New clone per `get()`; then `RequestContext` (Request, Session, CookieJar) is injected into the clone. |
+| **#[InjectAsFactory]**  | Factory for a contract: `getDefault()`, `get(string $key)`, `keys()`. Property type must be a Factory* interface. |
+
+- **What** is injected is determined by the **property type** (the type hint).
+- Only **protected** properties are considered. Constructor parameters are not used for DI (except for generated resolvers that receive implementations).
+
+Example:
 
 ```php
-use Semitexa\Core\Container\ContainerFactory;
-
-// Get container
-$container = ContainerFactory::get();
-
-// Get service
-$service = $container->get(SomeService::class);
-
-// Container is automatically reset after each Swoole request
-```
-
-### In Handlers
-
-```php
-use DI\Attribute\Inject;
-
-class MyHandler implements HttpHandlerInterface
+#[AsServiceContract(of: HandlerInterface::class)]
+final class MyHandler implements HandlerInterface
 {
-    public function __construct(
-        #[Inject] private MyService $myService
-    ) {}
-    
-    public function handle(RequestInterface $request, ResponseInterface $response)
+    #[InjectAsReadonly]
+    protected LoggerInterface $logger;
+
+    #[InjectAsMutable]
+    protected ItemListProviderInterface $provider;
+
+    #[InjectAsFactory]
+    protected FactoryItemListProviderInterface $providerFactory;
+
+    // Request/Session/Cookie: no attribute; injected from RequestContext into mutable clones
+    protected Request $httpRequest;
+    protected SessionInterface $session;
+    protected CookieJarInterface $cookies;
+
+    public function handle(RequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        // Use injected service
-        $this->myService->doSomething();
-        return $response;
+        // ...
     }
 }
 ```
 
-### Registering Services
+## Lifecycle
 
-Services are registered in `ContainerFactory::getDefinitions()`. Modules can extend this via service providers.
+- **Build (once per worker):** All `AsServiceContract` classes are discovered; dependency graph is built from properties only; readonly instances and mutable prototypes are created. Mutable↔mutable cycles are forbidden and cause an exception.
+- **Readonly:** One instance per type per worker; stored after build.
+- **Mutable:** One prototype per type; each `get()` returns `clone(prototype)` then injects the current **RequestContext** (Request, Session, CookieJar) into the clone. No re-resolution of other dependencies on clone.
 
-## Swoole Integration
+Request/Session/Cookie are **not** part of the normal dependency graph; they are provided per request via `RequestContext`. The application sets them on `RequestScopedContainer`; when all three are set, the container’s `RequestContext` is updated so that mutable services receive them after clone.
 
-Semitexa uses a **RequestScopedContainer** wrapper that ensures request-scoped services (handlers, services) get fresh instances for each request, while infrastructure services (registries, pools) remain singletons.
+## Usage
 
-### How It Works:
+```php
+use Semitexa\Core\Container\ContainerFactory;
 
-1. **RequestScopedContainer** automatically detects which services should be request-scoped:
-   - Handlers, Services, Repositories → request-scoped (new instance each request)
-   - Environment, Registry, Factory, Pool → singleton (safe to persist)
+$container = ContainerFactory::get();
+$service = $container->get(SomeInterface::class);  // or concrete class
 
-2. After each request, the request-scoped cache is reset in `server.php`
+$requestScoped = ContainerFactory::getRequestScoped();
+$handler = $requestScoped->get(MyHandler::class);   // mutable: clone + RequestContext
+```
 
-3. Handlers are resolved through `RequestScopedContainer`, ensuring clean state
+## Resolvers and Factory*
 
-### Best Practices for Swoole:
+- **Resolver (optional):** If `App\Registry\Contracts\{InterfaceShortName}Resolver` exists, the container uses it to get the active implementation; otherwise it uses the active implementation from the registry (module order).
+- **Factory*:** For contracts with a Factory* interface (e.g. `FactoryItemListProviderInterface`), the container binds it either to a generated factory class (when present) or to a generic `ContractFactory` implementation. Inject the Factory* interface to use `getDefault()`, `get($key)`, `keys()`.
 
-1. **Request-scoped services** (handlers, services that handle request data):
-   - Automatically handled by `RequestScopedContainer`
-   - Use `$app->getRequestScopedContainer()->get(Service::class)`
+See **docs/SERVICE_CONTRACTS.md** for contracts, `contracts:list`, and resolver/factory conventions.
 
-2. **Infrastructure services** (registries, connection pools):
-   - Use singleton pattern - safe to persist
-   - Use `$app->getContainer()->get(Registry::class)`
+## Swoole
 
-3. **Never store request data in singletons** - always use request-scoped resolution
-
-This ensures:
-- ✅ No memory leaks between requests
-- ✅ No data leakage between requests  
-- ✅ Clean state for each request
-- ✅ Optimal performance (singletons for infrastructure)
-
+- Container is built once per worker.
+- `RequestScopedContainer::reset()` is called after each request (e.g. in `server.php`) to clear request-scoped values and tenant context; the main container is not rebuilt.
+- Readonly services are safe to keep; mutable services are cloned per request and receive the current RequestContext, so no leakage between requests.

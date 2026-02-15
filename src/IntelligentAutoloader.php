@@ -76,9 +76,12 @@ class IntelligentAutoloader
             $projectRoot . '/vendor/semitexa'
         ];
         
-        // Also scan packages directory for local development
+        // Also scan packages directory for local development (packages / pakages)
         if (is_dir($projectRoot . '/packages')) {
             $directories[] = $projectRoot . '/packages';
+        }
+        if (is_dir($projectRoot . '/pakages')) {
+            $directories[] = $projectRoot . '/pakages';
         }
         
         // Always scan src/modules for local custom modules

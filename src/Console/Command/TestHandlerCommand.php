@@ -9,6 +9,9 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Semitexa\Core\Attributes\InjectAsFactory;
+use Semitexa\Core\Attributes\InjectAsMutable;
+use Semitexa\Core\Attributes\InjectAsReadonly;
 use Semitexa\Core\Container\ContainerFactory;
 use Semitexa\Core\Container\RequestScopedContainer;
 
@@ -51,30 +54,10 @@ class TestHandlerCommand extends BaseCommand
                 $io->error('❌ RequestScopedContainer->get() failed: ' . $e->getMessage());
             }
 
-            // Test 3: Direct make() + injectOn()
-            $io->section('Test 3: make() + injectOn()');
-            try {
-                $handler3 = $container->make($handlerClass);
-                $container->injectOn($handler3);
-                $io->success('✅ make() + injectOn() succeeded');
-                $this->inspectHandler($io, $handler3, $handlerClass);
-            } catch (\Throwable $e) {
-                $io->error('❌ make() + injectOn() failed: ' . $e->getMessage());
-            }
-
-            // Test 4: Check if handler has definition
-            $io->section('Test 4: Container definitions');
+            // Test 3: Check if handler is registered
+            $io->section('Test 3: Container has()');
             $hasDefinition = $container->has($handlerClass);
-            $io->text('Has definition: ' . ($hasDefinition ? '✅ yes' : '❌ no'));
-            
-            if ($hasDefinition) {
-                try {
-                    $definition = $container->getDefinition($handlerClass);
-                    $io->text('Definition type: ' . get_class($definition));
-                } catch (\Throwable $e) {
-                    $io->text('Cannot get definition: ' . $e->getMessage());
-                }
-            }
+            $io->text('Has entry: ' . ($hasDefinition ? '✅ yes' : '❌ no'));
 
         } catch (\Throwable $e) {
             $io->error('Fatal error: ' . $e->getMessage());
@@ -97,9 +80,17 @@ class TestHandlerCommand extends BaseCommand
             $name = $property->getName();
             $value = $property->getValue($handler);
             
-            // Check for #[Inject] attribute
-            $hasInject = !empty($property->getAttributes(\DI\Attribute\Inject::class));
-            $injectMark = $hasInject ? ' [#[Inject]]' : '';
+            $attrs = [];
+            if (!empty($property->getAttributes(InjectAsReadonly::class))) {
+                $attrs[] = 'InjectAsReadonly';
+            }
+            if (!empty($property->getAttributes(InjectAsMutable::class))) {
+                $attrs[] = 'InjectAsMutable';
+            }
+            if (!empty($property->getAttributes(InjectAsFactory::class))) {
+                $attrs[] = 'InjectAsFactory';
+            }
+            $injectMark = $attrs !== [] ? ' [' . implode(', ', $attrs) . ']' : '';
             
             if ($value === null) {
                 $io->text("  ❌ {$name}: NULL (not initialized){$injectMark}");
